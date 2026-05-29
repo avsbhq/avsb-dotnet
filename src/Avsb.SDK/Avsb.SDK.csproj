@@ -6,10 +6,25 @@
     <Version>1.0.0</Version>
     <PackageId>Avsb.SDK</PackageId>
     <Authors>AvsB</Authors>
+    <Company>AvsB Platform</Company>
     <Description>A vs B feature-flag and experimentation SDK for .NET.</Description>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/avsbhq/avsb-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/avsbhq/avsb-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>feature-flags;experimentation;ab-testing;openfeature;dotnet</PackageTags>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>Avsb.SDK.Tests</_Parameter1>

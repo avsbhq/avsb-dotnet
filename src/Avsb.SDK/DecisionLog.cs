@@ -26,7 +26,7 @@ public sealed record DecisionLogEntry
     /// <summary>Microseconds elapsed in the evaluator.</summary>
     public long DurationMicros { get; init; }
 
-    /// <summary>Kind + key pairs — attributes intentionally omitted to avoid PII.</summary>
+    /// <summary>Kind + key pairs; attributes intentionally omitted to avoid PII.</summary>
     public IReadOnlyList<ContextSummaryEntry> ContextSummary { get; init; }
         = Array.Empty<ContextSummaryEntry>();
 

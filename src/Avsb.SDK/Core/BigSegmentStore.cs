@@ -5,7 +5,7 @@ namespace Avsb.SDK.Core;
 /// </summary>
 public interface IBigSegmentStore
 {
-    /// <summary>Synchronous membership check — hot-path safe.</summary>
+    /// <summary>Synchronous membership check; hot-path safe.</summary>
     bool IsMember(string segmentKey, string contextKey);
 
     /// <summary>Bulk membership for one context, keyed by segmentKey.</summary>

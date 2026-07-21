@@ -1,4 +1,4 @@
-# Avsb.SDK — .NET
+# Avsb.SDK: .NET
 
 Official .NET SDK for the [A vs B](https://app.avsb.cloud) feature-flag and experimentation platform.
 
@@ -16,7 +16,7 @@ NuGet package: `Avsb.SDK`. **Runtime requirement:** .NET 8 (`net8.0`) or any fra
 
 ### ASP.NET Core DI package (included in `Avsb.SDK`)
 
-The DI extension and middleware are in `Avsb.SDK.AspNetCore` — no separate package needed.
+The DI extension and middleware are in `Avsb.SDK.AspNetCore`; no separate package needed.
 
 ---
 
@@ -38,14 +38,14 @@ var ctx  = EvalContext.User("alice", attributes: new Dictionary<string, object?>
 var flag = server.GetBoolFlag("checkout-v2", false, ctx);
 
 if (flag.IsEnabled())
-    Console.WriteLine($"New checkout — variation: {flag.VariationKey}");
+    Console.WriteLine($"New checkout, variation: {flag.VariationKey}");
 ```
 
 ---
 
 ## 3. SDK keys
 
-Get a **server SDK key** from your A vs B project's Environments page. Store it as an environment variable or in .NET secrets — never hard-code it.
+Get a **server SDK key** from your A vs B project's Environments page. Store it as an environment variable or in .NET secrets; never hard-code it.
 
 ```bash
 export AVSB_SDK_KEY=sdk-...
@@ -67,7 +67,7 @@ Never use the public (client-side) SDK key in server code. Server SDK keys carry
 
 `EvalContext` is a sealed record with static factory methods. Two subtypes: `SingleContext` (one kinded identity) and `MultiContext` (keyed collection of single contexts).
 
-### `EvalContext.User(key, ...)` — user context
+### `EvalContext.User(key, ...)`: user context
 
 ```csharp
 var ctx = EvalContext.User(
@@ -90,7 +90,7 @@ var single = new SingleContext { Kind = "device", Key = "d_abc",
 var ctx = EvalContext.FromSingle(single);
 ```
 
-### `Track` / `Identify` — additional lifecycle methods
+### `Track` / `Identify`: additional lifecycle methods
 
 ```csharp
 server.Identify(ctx);
@@ -140,21 +140,21 @@ Flag<MyDto?> jsonFlag   = server.GetJsonFlag<MyDto>("api-config", null, ctx);
 
 A `defaultValue` is required on every call. It is returned when the flag is not found, the server is not initialised, or evaluation fails.
 
-### `Flag<T>` — full evaluation envelope
+### `Flag<T>`: full evaluation envelope
 
 ```csharp
 Flag<bool> flag = server.GetBoolFlag("checkout-v2", false, ctx);
 
-flag.Value           // T — the evaluated value
-flag.VariationKey    // string? — matched variation key
+flag.Value           // T: the evaluated value
+flag.VariationKey    // string?: matched variation key
 flag.Source          // EvaluationSource enum
-flag.RuleId          // string? — matched rule id
+flag.RuleId          // string?: matched rule id
 flag.RuleType        // RuleType? enum
 flag.Reasons         // IReadOnlyList<string>
-flag.EvaluatedAt     // long — ms epoch
-flag.DurationMicros  // long — microseconds in evaluator
-flag.IsEnabled()     // bool — Source==Rule && truthy value
-flag.Exists()        // bool — Source != NotFound
+flag.EvaluatedAt     // long: ms epoch
+flag.DurationMicros  // long: microseconds in evaluator
+flag.IsEnabled()     // bool: Source==Rule && truthy value
+flag.Exists()        // bool: Source != NotFound
 ```
 
 `EvaluationSource` is an enum with values `Rule`, `Holdout`, `Default`, `NotFound`, `DatafileOverride`, `Disabled`, `Sticky`, `Bandit`.
@@ -195,7 +195,7 @@ var server = new AvsbServer(new AvsbServerOptions
 
 When using the DI extension, the `ILogger<AvsbServer>` is resolved from the container automatically.
 
-`InitAsync` returns an `InitResult` record — it never throws:
+`InitAsync` returns an `InitResult` record; it never throws:
 
 ```csharp
 public sealed record InitResult
@@ -381,7 +381,7 @@ var value = server.GetBoolFlag("checkout-v2", false, ctx).Value;
 ```
 
 ```csharp
-// LaunchDarkly — multi-context
+// LaunchDarkly (multi-context)
 var multi = Context.MultiBuilder()
     .Add(Context.New("alice"))
     .Add(Context.Builder("acme").Kind("organization").Set("tier", "enterprise").Build())
@@ -389,7 +389,7 @@ var multi = Context.MultiBuilder()
 ```
 
 ```csharp
-// A vs B — multi-context
+// A vs B (multi-context)
 var ctx = EvalContext.FromMulti(new MultiContext
 {
     Contexts = new Dictionary<string, SingleContext>
@@ -423,13 +423,13 @@ var gate = server.GetBoolFlag("checkout-v2", false, ctx).IsEnabled();
 ```
 
 ```csharp
-// Statsig — log event
+// Statsig (log event)
 StatsigServer.LogEvent(user, "purchase", value: "49.99",
     metadata: new Dictionary<string, string> { ["plan"] = "pro" });
 ```
 
 ```csharp
-// A vs B — track event
+// A vs B (track event)
 server.Track("purchase", ctx, new TrackPayload
 {
     Value      = 49.99,

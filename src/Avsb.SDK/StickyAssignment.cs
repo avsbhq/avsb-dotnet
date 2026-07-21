@@ -17,7 +17,7 @@ public sealed record StickyAssignment
 /// </summary>
 public interface IStickyBucketService
 {
-    /// <summary>Synchronous lookup — hot-path safe.</summary>
+    /// <summary>Synchronous lookup; hot-path safe.</summary>
     StickyAssignment? Lookup(string userId, string flagKey);
 
     /// <summary>Persist an assignment. Implementations may fire-and-forget.</summary>

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Avsb.SDK.Core;
 
 // -----------------------------------------------------------------------
-// FlagDatafile — JSON-serialisable representation of the AvsB datafile.
+// FlagDatafile: JSON-serialisable representation of the AvsB datafile.
 // Mirrors the FlagDatafile wire shape from types.ts §2.15.
 // All property names are camelCase on the wire; System.Text.Json handles
 // this via JsonPropertyName attributes or a global naming policy.

@@ -1,7 +1,7 @@
 namespace Avsb.SDK.Core;
 
 /// <summary>
-/// MurmurHash3_x86_32 — deterministic 32-bit hash for visitor bucketing.
+/// MurmurHash3_x86_32: deterministic 32-bit hash for visitor bucketing.
 /// Exact port of hash.ts. Uses uint (System.UInt32) so unsigned bit
 /// semantics match the TypeScript >>> 0 promotion naturally.
 /// </summary>

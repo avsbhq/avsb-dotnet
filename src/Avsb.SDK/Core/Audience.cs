@@ -4,28 +4,49 @@ using System.Text.RegularExpressions;
 namespace Avsb.SDK.Core;
 
 /// <summary>
-/// Server-side audience evaluation. Mirrors audience.ts — only
-/// CUSTOM_ATTRIBUTE conditions are evaluable server-side; browser-detected
-/// types (DEVICE, BROWSER, PLATFORM, LANGUAGE, COOKIE, QUERY_PARAM) always
-/// return false on the server.
+/// Server-side audience evaluation. Mirrors evaluateAudience, evaluateGroup, and
+/// evaluateCondition in audience.ts.
+///
+/// Three families of condition reach this evaluator: CUSTOM_ATTRIBUTE answered from the
+/// evaluation context, the commerce families delegated to <see cref="AudienceCommerce"/>, and the
+/// browser-detected families (DEVICE, BROWSER, PLATFORM, LANGUAGE, COOKIE, QUERY_PARAM) which a
+/// server cannot answer and which therefore return false.
+///
+/// Operator aliases matter more than they look. The dashboard audience builder writes "is",
+/// "is_not", "does_not_contain", and "does_not_exist" for the device-style condition types, and
+/// those spellings reach CUSTOM_ATTRIBUTE conditions too. Before they were handled here, an
+/// audience saved with "is" fell through to the default arm and matched nobody, with nothing
+/// logged.
+///
+/// Comparisons go through <see cref="JsNumber"/> so a numeric attribute compares identically in
+/// every SDK, and case-insensitive comparisons use the INVARIANT culture: a process running under
+/// a Turkish culture would otherwise lowercase "I" to a dotless i and stop matching.
 /// </summary>
 internal static class AudienceEvaluator
 {
-    public static bool EvaluateAudience(FlagDatafileAudience audience, EvalContext ctx)
+    public static bool EvaluateAudience(FlagDatafileAudience audience, EvalContext ctx) =>
+        EvaluateAudience(audience, ctx, AudienceCommerce.DefaultCurrencyExponent);
+
+    public static bool EvaluateAudience(
+        FlagDatafileAudience audience, EvalContext ctx, int currencyExponent)
     {
         if (audience.Rules is null) return true;
-        return EvaluateGroup(audience.Rules, ctx);
+        return EvaluateGroup(audience.Rules, ctx, currencyExponent);
     }
 
-    public static bool EvaluateGroup(ConditionGroup group, EvalContext ctx)
+    public static bool EvaluateGroup(ConditionGroup group, EvalContext ctx) =>
+        EvaluateGroup(group, ctx, AudienceCommerce.DefaultCurrencyExponent);
+
+    /// <summary>Evaluate a condition group. An empty group matches, mirroring the reference.</summary>
+    public static bool EvaluateGroup(ConditionGroup group, EvalContext ctx, int currencyExponent)
     {
         if (group.Conditions.Count == 0) return true;
 
         bool isAnd = string.Equals(group.Logic, "AND", StringComparison.OrdinalIgnoreCase);
 
-        foreach (var element in group.Conditions)
+        foreach (JsonElement element in group.Conditions)
         {
-            bool result = EvaluateElement(element, ctx);
+            bool result = EvaluateElement(element, ctx, currencyExponent);
             if (isAnd && !result) return false;
             if (!isAnd && result) return true;
         }
@@ -33,26 +54,35 @@ internal static class AudienceEvaluator
         return isAnd;
     }
 
-    private static bool EvaluateElement(JsonElement element, EvalContext ctx)
+    private static bool EvaluateElement(JsonElement element, EvalContext ctx, int currencyExponent)
     {
-        // Distinguish ConditionGroup (has "logic") from Condition.
+        // A node carrying "logic" is a nested group; anything else is a condition.
         if (element.TryGetProperty("logic", out _))
         {
             var nested = element.Deserialize<ConditionGroup>(JsonOptions.Default);
-            return nested is not null && EvaluateGroup(nested, ctx);
+            return nested is not null && EvaluateGroup(nested, ctx, currencyExponent);
         }
 
         var condition = element.Deserialize<Condition>(JsonOptions.Default);
-        return condition is not null && EvaluateCondition(condition, ctx);
+        return condition is not null && EvaluateCondition(condition, ctx, currencyExponent);
     }
 
-    public static bool EvaluateCondition(Condition condition, EvalContext ctx)
+    public static bool EvaluateCondition(Condition condition, EvalContext ctx) =>
+        EvaluateCondition(condition, ctx, AudienceCommerce.DefaultCurrencyExponent);
+
+    public static bool EvaluateCondition(Condition condition, EvalContext ctx, int currencyExponent)
     {
         return condition.Type switch
         {
             "CUSTOM_ATTRIBUTE" => EvalCustomAttribute(condition, ctx),
-            // Browser-detected types are not evaluable server-side.
-            "DEVICE" or "BROWSER" or "PLATFORM" or "LANGUAGE" or "COOKIE" or "QUERY_PARAM" => false,
+            "CART_VALUE" or "PRODUCTS_VIEWED" or "PURCHASE_HISTORY" =>
+                AudienceCommerce.EvaluateCommerceCondition(
+                    condition,
+                    attribute => ResolveAttribute(ctx, condition.ContextKind, attribute),
+                    currencyExponent),
+            // Device, browser, platform, language, cookie, and query-param conditions are
+            // answered from a live browser. A server has none of those signals, so they are
+            // false here rather than guessed.
             _ => false,
         };
     }
@@ -61,108 +91,110 @@ internal static class AudienceEvaluator
     {
         if (string.IsNullOrEmpty(condition.Attribute)) return false;
 
-        // When contextKind is declared, the sub-context must be present.
-        if (condition.ContextKind is not null)
+        // A declared contextKind that is absent from the context is a hard no-match. That is
+        // NOT the same as a missing attribute, which can still satisfy does_not_exist.
+        if (!string.IsNullOrEmpty(condition.ContextKind)
+            && ContextHelper.GetContextByKind(ctx, condition.ContextKind!) is null)
         {
-            var sub = ContextHelper.GetContextByKind(ctx, condition.ContextKind);
-            if (sub is null) return false;
+            return false;
         }
 
-        var actual = condition.ContextKind is not null
-            ? GetAttributeForKind(ctx, condition.ContextKind, condition.Attribute)
-            : GetAttributeFallback(ctx, condition.Attribute);
-
-        string expected = GetExpectedScalar(condition.Value);
+        object? actual = ResolveAttribute(ctx, condition.ContextKind, condition.Attribute!);
+        string actualText = JsNumber.StringOf(actual);
+        string expected = JsNumber.StringOf(ExpectedScalar(condition.Value));
 
         return condition.Operator switch
         {
             "exists" => actual is not null,
-            "not_exists" => actual is null,
-            "equals" => StringOf(actual) == expected,
-            "not_equals" => StringOf(actual) != expected,
-            "contains" => StringOf(actual).Contains(expected, StringComparison.OrdinalIgnoreCase),
-            "not_contains" => !StringOf(actual).Contains(expected, StringComparison.OrdinalIgnoreCase),
-            "starts_with" => StringOf(actual).StartsWith(expected, StringComparison.OrdinalIgnoreCase),
-            "ends_with" => StringOf(actual).EndsWith(expected, StringComparison.OrdinalIgnoreCase),
-            "regex" => EvalRegex(StringOf(actual), expected),
-            "greater_than" => ToDouble(actual) > ToDouble(expected),
-            "less_than" => ToDouble(actual) < ToDouble(expected),
-            "gte" => ToDouble(actual) >= ToDouble(expected),
-            "lte" => ToDouble(actual) <= ToDouble(expected),
-            "in_list" => InList(actual, condition.Value, negate: false),
-            "not_in_list" => InList(actual, condition.Value, negate: true),
+            "not_exists" or "does_not_exist" => actual is null,
+            "equals" or "is" => actualText == expected,
+            "not_equals" or "is_not" => actualText != expected,
+            "contains" => actualText.Contains(expected, StringComparison.OrdinalIgnoreCase),
+            "not_contains" or "does_not_contain" =>
+                !actualText.Contains(expected, StringComparison.OrdinalIgnoreCase),
+            "starts_with" => actualText.StartsWith(expected, StringComparison.OrdinalIgnoreCase),
+            "ends_with" => actualText.EndsWith(expected, StringComparison.OrdinalIgnoreCase),
+            "regex" => EvalRegex(actualText, expected),
+            "greater_than" => JsNumber.NumberOf(actual) > JsNumber.NumberOf(expected),
+            "less_than" => JsNumber.NumberOf(actual) < JsNumber.NumberOf(expected),
+            "gte" => JsNumber.NumberOf(actual) >= JsNumber.NumberOf(expected),
+            "lte" => JsNumber.NumberOf(actual) <= JsNumber.NumberOf(expected),
+            "in_list" => AnyValueMatches(actualText, condition.Value),
+            "not_in_list" => !AnyValueMatches(actualText, condition.Value),
             _ => false,
         };
     }
 
-    private static object? GetAttributeForKind(EvalContext ctx, string kind, string attribute)
+    /// <summary>
+    /// Resolve a (contextKind, attribute) pair. With no declared kind the lookup falls back to
+    /// the primary context, where "userId" still addresses its key for v1 datafiles.
+    /// </summary>
+    internal static object? ResolveAttribute(EvalContext ctx, string? contextKind, string attribute)
     {
-        var sub = ContextHelper.GetContextByKind(ctx, kind);
-        if (sub is null) return null;
-        return ContextHelper.ReadSubContextAttribute(sub, attribute);
-    }
-
-    private static object? GetAttributeFallback(EvalContext ctx, string attribute)
-    {
-        // No contextKind on the condition — fall back to primary context.
-        if (!ctx.IsMulti)
+        if (!string.IsNullOrEmpty(contextKind))
         {
-            if (attribute == "userId") return ctx.Single!.Key;
-            return ContextHelper.ReadSubContextAttribute(ctx.Single!, attribute);
+            SingleContext? sub = ContextHelper.GetContextByKind(ctx, contextKind!);
+            if (sub is null) return null;
+            return ContextHelper.ReadSubContextAttribute(sub, attribute);
         }
-        var user = ContextHelper.GetContextByKind(ctx, "user");
-        if (user is null) return null;
-        if (attribute == "userId") return user.Key;
-        return ContextHelper.ReadSubContextAttribute(user, attribute);
+
+        SingleContext? primary = ctx.IsMulti
+            ? ContextHelper.GetContextByKind(ctx, "user")
+            : ctx.Single;
+        if (primary is null) return null;
+        if (attribute == "userId") return primary.Key;
+        return ContextHelper.ReadSubContextAttribute(primary, attribute);
     }
 
-    private static string GetExpectedScalar(JsonElement value)
+    private static object? ExpectedScalar(JsonElement value)
     {
-        if (value.ValueKind == JsonValueKind.Array && value.GetArrayLength() > 0)
-            return value[0].ToString();
-        return value.ToString();
-    }
-
-    private static string StringOf(object? val) =>
-        val?.ToString() ?? string.Empty;
-
-    private static double ToDouble(object? val)
-    {
-        if (val is null) return double.NaN;
-        if (double.TryParse(val.ToString(), System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out var d))
-            return d;
-        return double.NaN;
-    }
-
-    private static double ToDouble(string s)
-    {
-        if (double.TryParse(s, System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out var d))
-            return d;
-        return double.NaN;
+        JsonElement scalar = value;
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            scalar = default;
+            foreach (JsonElement item in value.EnumerateArray())
+            {
+                scalar = item;
+                break;
+            }
+        }
+        return scalar.ValueKind switch
+        {
+            JsonValueKind.Undefined => null,
+            JsonValueKind.Null => null,
+            JsonValueKind.String => scalar.GetString(),
+            JsonValueKind.Number => scalar.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => scalar.GetRawText(),
+        };
     }
 
     private static bool EvalRegex(string actual, string pattern)
     {
         try
         {
-            return Regex.IsMatch(actual, pattern, RegexOptions.IgnoreCase);
+            // A one-second cap: a pathological pattern in a datafile must not hang an
+            // evaluation on the request path.
+            return Regex.IsMatch(actual, pattern, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         }
         catch
         {
+            // The reference swallows an invalid pattern and reports no match.
             return false;
         }
     }
 
-    private static bool InList(object? actual, JsonElement valueElement, bool negate)
+    private static bool AnyValueMatches(string actualText, JsonElement rawExpected)
     {
-        var list = valueElement.ValueKind == JsonValueKind.Array
-            ? valueElement.EnumerateArray().Select(e => e.ToString()).ToList()
-            : new List<string> { valueElement.ToString() };
-
-        var str = StringOf(actual);
-        bool inList = list.Any(v => str == v);
-        return negate ? !inList : inList;
+        if (rawExpected.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement candidate in rawExpected.EnumerateArray())
+            {
+                if (actualText == JsNumber.StringOf(ExpectedScalar(candidate))) return true;
+            }
+            return false;
+        }
+        return actualText == JsNumber.StringOf(ExpectedScalar(rawExpected));
     }
 }

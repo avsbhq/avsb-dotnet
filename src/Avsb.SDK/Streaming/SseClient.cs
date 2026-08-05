@@ -1,8 +1,16 @@
 namespace Avsb.SDK.Streaming;
 
 /// <summary>
-/// HTTP-based Server-Sent Events client. Delivers each event line to a
-/// provided callback, reconnecting with exponential back-off on failure.
+/// HTTP-based Server-Sent Events client. Delivers each event line to a provided callback,
+/// reconnecting with exponential back-off on failure.
+///
+/// NOT WIRED INTO AvsbServer YET, and deliberately so. Streaming needs an endpoint, and the only
+/// correct source for one is the datafile's streamEndpoint field resolved through
+/// Endpoints.ResolveStreamEndpoint. Defaulting to a guessed host is what gave Go customers an
+/// infinite reconnect loop against DNS that does not resolve, so this class stays available and
+/// unwired until the streaming session lands. AvsbServer no longer carries the _sseClient field
+/// that was declared, disposed, and never assigned. The background polling loop keeps flags fresh
+/// in the meantime.
 /// </summary>
 public sealed class SseClient : IAsyncDisposable
 {

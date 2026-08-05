@@ -2,7 +2,9 @@
 
 Official .NET SDK for the [A vs B](https://app.avsb.cloud) feature-flag and experimentation platform.
 
-Targets `netstandard2.1` and `net8.0`. ASP.NET Core middleware, `IServiceCollection` DI integration, `IAsyncDisposable` lifecycle. OpenFeature provider included.
+netstandard2.1 and net8.0. Evaluation happens in your process against a datafile read from a globally cached CDN, so a flag check is a few microseconds of local work with no network call and no proxy to operate.
+
+ASP.NET Core wiring and an OpenFeature provider are included in the same package.
 
 ---
 
@@ -12,11 +14,16 @@ Targets `netstandard2.1` and `net8.0`. ASP.NET Core middleware, `IServiceCollect
 dotnet add package Avsb.SDK
 ```
 
-NuGet package: `Avsb.SDK`. **Runtime requirement:** .NET 8 (`net8.0`) or any framework supporting `netstandard2.1`.
+Required at runtime: `Microsoft.Extensions.Logging.Abstractions`. Everything else is optional and only needed if you use the matching feature:
 
-### ASP.NET Core DI package (included in `Avsb.SDK`)
+| Package | Needed for |
+| --- | --- |
+| `OpenFeature` | `AvsbOpenFeatureProvider` |
+| `StackExchange.Redis` | `RedisStickyBucketService` |
+| `AWSSDK.DynamoDBv2` | `DynamoDBStickyBucketService` |
+| `Microsoft.AspNetCore.Http.Abstractions` | the ASP.NET Core middleware |
 
-The DI extension and middleware are in `Avsb.SDK.AspNetCore`; no separate package needed.
+Those four are declared with `PrivateAssets="all"`, so they do not flow into your project. Add the one you need.
 
 ---
 
@@ -27,193 +34,278 @@ using Avsb.SDK;
 
 var server = new AvsbServer(new AvsbServerOptions
 {
-    SdkKey = Environment.GetEnvironmentVariable("AVSB_SDK_KEY")!
+    SdkKey = Environment.GetEnvironmentVariable("AVSB_SDK_KEY")!,
 });
 
-var result = await server.InitAsync();
-if (!result.Success && !result.Degraded)
-    throw new InvalidOperationException($"AvsB init failed: {result.Error?.Message}");
+InitResult init = await server.InitAsync();
+if (!init.Success)
+{
+    // Flags still work: every call returns the default you pass, and the SDK has already logged
+    // the URL it tried, the status it got, and a curl to reproduce it.
+}
 
-var ctx  = EvalContext.User("alice", attributes: new Dictionary<string, object?> { ["plan"] = "pro" });
-var flag = server.GetBoolFlag("checkout-v2", false, ctx);
-
+Flag<bool> flag = server.GetBoolFlag("checkout-v2", false, EvalContext.User("user_42"));
 if (flag.IsEnabled())
-    Console.WriteLine($"New checkout, variation: {flag.VariationKey}");
+{
+    // new checkout
+}
+
+server.Track("signup_completed", EvalContext.User("user_42"));
+
+await server.DisposeAsync();   // stops polling and flushes queued events
 ```
+
+Copy your SDK key from the A vs B dashboard: Settings, then Environments. Keys look like `sdk_production_ttqm0eaj4vth1krcb2xn`. Nothing else is required: the datafile URL, the ingest endpoint, and the heartbeat endpoint are all derived.
 
 ---
 
-## 3. SDK keys
+## 3. What the SDK does for you
 
-Get a **server SDK key** from your A vs B project's Environments page. Store it as an environment variable or in .NET secrets; never hard-code it.
+| | |
+| --- | --- |
+| Datafile | Fetched from `https://cdn.avsb.cloud/{sdkKey}/datafile.json` on `InitAsync`, then refreshed every 30 seconds (jittered). |
+| Retry | The polling loop starts even when the FIRST fetch fails, so a blip at deploy time costs one interval instead of bricking flags until restart. |
+| Evaluation | Local, synchronous, no network call. |
+| Events | `Track` and exposures are queued, batched, retried with jittered backoff, and flushed on dispose. |
+| Liveness | A heartbeat after each successful datafile load drives the Connected state on the Environments page. |
+| Failure | Loud. Every failure names the value involved and what to do about it. |
 
-```bash
-export AVSB_SDK_KEY=sdk-...
-# or: dotnet user-secrets set "Avsb:SdkKey" "sdk-..."
-```
+---
+
+## 4. Options
 
 ```csharp
-// appsettings.json
+public sealed record AvsbServerOptions
 {
-  "Avsb": { "SdkKey": "" }   // populated via environment / secrets
+    public string SdkKey { get; init; }                                    // required
+    public string? CdnHost { get; init; }                                  // default https://cdn.avsb.cloud
+    public string? DatafileUrl { get; init; }                              // default derived from the key
+    public TimeSpan? PollInterval { get; init; }                           // default 30 seconds
+    public TimeSpan? FetchTimeout { get; init; }                           // default 10 seconds
+    public bool Polling { get; init; } = true;
+    public bool Tracking { get; init; } = true;
+    public string? Bootstrap { get; init; }                                // datafile JSON
+    public IReadOnlyDictionary<string, string>? RuntimeOverrides { get; init; }
+    public ILogger? Logger { get; init; }
+    public IStickyBucketService? StickyBucketService { get; init; }
+    public IAvsbBanditModelStore? BanditModelStore { get; init; }
+    public int DecisionLogCapacity { get; init; } = 1000;                   // 0 turns it off
 }
 ```
 
-Never use the public (client-side) SDK key in server code. Server SDK keys carry elevated trust and must not be included in responses served to browsers.
+Two notes worth reading:
+
+- `Bootstrap` takes datafile JSON and serves it immediately, so flags work before the first fetch completes and keep working if that fetch fails.
+- `RuntimeOverrides` maps a flag key to a VARIATION KEY, resolved against the datafile so the served value and its key are real. A variation key that does not exist is logged and ignored rather than serving something invented.
+
+The old `Endpoint` option is gone. It took a base `Uri` and combined it with a leading-slash relative path, and that combine silently discarded the base path: a customer who correctly configured `https://host/v1` still fetched `https://host/datafile/{key}`. Use `CdnHost` for a different origin, or `DatafileUrl` for a completely different URL.
 
 ---
 
-## 4. Identity
-
-`EvalContext` is a sealed record with static factory methods. Two subtypes: `SingleContext` (one kinded identity) and `MultiContext` (keyed collection of single contexts).
-
-### `EvalContext.User(key, ...)`: user context
+## 5. Identity
 
 ```csharp
-var ctx = EvalContext.User(
-    "alice",
-    name: "Alice Liddell",
-    attributes: new Dictionary<string, object?>
-    {
-        ["plan"]       = "pro",
-        ["betaTester"] = true,
-    }
-);
-```
+public sealed record SingleContext
+{
+    public string Kind { get; init; } = "user";
+    public string Key { get; init; } = string.Empty;
+    public string? Name { get; init; }
+    public ContextMeta? Meta { get; init; }
+    public IReadOnlyDictionary<string, object?> Attributes { get; init; }
+}
 
-### `EvalContext.FromSingle(singleContext)` / `EvalContext.FromMulti(multiContext)`
+public sealed record MultiContext
+{
+    public IReadOnlyDictionary<string, SingleContext> Contexts { get; init; }
+}
+
+public sealed record EvalContext
+{
+    public SingleContext? Single { get; }
+    public MultiContext? Multi { get; }
+    public bool IsMulti { get; }
+
+    public static EvalContext User(string key, string? name = null,
+        IDictionary<string, object?>? attributes = null, ContextMeta? meta = null);
+    public static EvalContext FromSingle(SingleContext ctx);
+    public static EvalContext FromMulti(MultiContext ctx);
+}
+```
 
 ```csharp
-var single = new SingleContext { Kind = "device", Key = "d_abc",
-    Attributes = new Dictionary<string, object?> { ["os"] = "linux" } };
-
-var ctx = EvalContext.FromSingle(single);
+var ctx = EvalContext.User("user_42", attributes: new Dictionary<string, object?>
+{
+    ["plan"] = "pro",
+    ["seats"] = 25,
+});
 ```
 
-### `Track` / `Identify`: additional lifecycle methods
+The `Key` is what buckets the user, so it must be stable for the same person. An empty key means every request lands in the same bucket, which corrupts an experiment invisibly, so the SDK warns once per client naming the call to add.
 
-```csharp
-server.Identify(ctx);
-```
-
----
-
-## 5. Multi-context
+### Multi-context, for organisation-keyed targeting
 
 ```csharp
 var ctx = EvalContext.FromMulti(new MultiContext
 {
     Contexts = new Dictionary<string, SingleContext>
     {
-        ["user"] = new SingleContext
-        {
-            Kind = "user",
-            Key  = "alice",
-            Attributes = new Dictionary<string, object?> { ["plan"] = "pro" },
-        },
-        ["organization"] = new SingleContext
+        ["user"] = new() { Kind = "user", Key = "user_42" },
+        ["organization"] = new()
         {
             Kind = "organization",
-            Key  = "acme",
+            Key = "org_7",
             Attributes = new Dictionary<string, object?> { ["tier"] = "enterprise" },
         },
-    }
+    },
 });
-
-var flag = server.GetBoolFlag("enterprise-feature", false, ctx);
 ```
-
-When a rule specifies `hashAttribute: "organization.key"`, all members of the same organisation receive the same variation regardless of their user key.
 
 ---
 
 ## 6. Reading flags
 
-### Typed methods
-
 ```csharp
-Flag<bool>   boolFlag   = server.GetBoolFlag("promo-banner",  false,   ctx);
-Flag<string> stringFlag = server.GetStringFlag("ui-theme",    "light", ctx);
-Flag<double> numFlag    = server.GetNumberFlag("max-retries", 3.0,     ctx);
-Flag<MyDto?> jsonFlag   = server.GetJsonFlag<MyDto>("api-config", null, ctx);
+Flag<bool>   GetBoolFlag(string key, bool defaultValue, EvalContext? context = null);
+Flag<string> GetStringFlag(string key, string defaultValue, EvalContext? context = null);
+Flag<double> GetNumberFlag(string key, double defaultValue, EvalContext? context = null);
+Flag<T?>     GetJsonFlag<T>(string key, T? defaultValue, EvalContext? context = null);
+IReadOnlyDictionary<string, object?> GetAllFlags(EvalContext? context = null);
 ```
 
-A `defaultValue` is required on every call. It is returned when the flag is not found, the server is not initialised, or evaluation fails.
+Notes that are not obvious:
 
-### `Flag<T>`: full evaluation envelope
+- `GetNumberFlag` always resolves to a `double`, never an `int`. The reference engine has a single numeric type and cannot distinguish `3` from `3.0`.
+- `GetJsonFlag<T>` evaluates DIRECTLY and deserialises the document into `T`. It used to read the flag as a string first and parse that string, so a JSON flag holding a real object resolved to null and every caller silently got their default.
+- `GetAllFlags` returns raw untyped values for bootstrapping a browser client from a server-rendered page, and fires exposures for every decided flag.
+
+### Type safety, and what happens on a mismatch
+
+| Situation | What you get |
+| --- | --- |
+| Value resolves and the type matches | the value |
+| Resolved value is the wrong type | your default, `Source = NotFound`, one reason naming the flag and what it actually resolved to, plus a logged warning |
+| Datafile declares a different type than the getter asked for | your default, `Source = NotFound`, one reason naming both types and the getter to use instead |
+| No datafile loaded yet | your default, `Source = NotReady` |
+
+It never throws, and it never coerces. A string flag read through `GetBoolFlag` does not become `true`.
 
 ```csharp
-Flag<bool> flag = server.GetBoolFlag("checkout-v2", false, ctx);
+public sealed record Pricing(string Plan, double Amount);
 
-flag.Value           // T: the evaluated value
-flag.VariationKey    // string?: matched variation key
-flag.Source          // EvaluationSource enum
-flag.RuleId          // string?: matched rule id
-flag.RuleType        // RuleType? enum
-flag.Reasons         // IReadOnlyList<string>
-flag.EvaluatedAt     // long: ms epoch
-flag.DurationMicros  // long: microseconds in evaluator
-flag.IsEnabled()     // bool: Source==Rule && truthy value
-flag.Exists()        // bool: Source != NotFound
+Flag<Pricing?> pricing = server.GetJsonFlag<Pricing>(
+    "pricing", new Pricing("standard", 9.99), EvalContext.User("user_42"));
+
+double amount = pricing.Value!.Amount;
 ```
 
-`EvaluationSource` is an enum with values `Rule`, `Holdout`, `Default`, `NotFound`, `DatafileOverride`, `Disabled`, `Sticky`, `Bandit`.
+### `Flag<T>`
+
+```csharp
+public readonly record struct Flag<T>
+{
+    public T Value { get; init; }                        // your default when the datafile could not answer
+    public string? VariationKey { get; init; }           // null when no variation was served
+    public EvaluationSource Source { get; init; }
+    public string? RuleId { get; init; }                 // null unless a rule or holdout decided
+    public RuleType? RuleType { get; init; }             // null unless a rule or holdout decided
+    public IReadOnlyList<string> Reasons { get; init; }  // ordered
+    public long EvaluatedAt { get; init; }               // ms since the Unix epoch
+    public long DurationMicros { get; init; }
+
+    public bool IsEnabled();
+    public bool Exists();
+}
+```
+
+`IsEnabled()` is true when BOTH hold:
+
+1. `Source` is one of `Rule`, `Holdout`, `Bandit`, `RuntimeOverride`, `DatafileOverride`, `Sticky`. A flag serving its DEFAULT variation is not enabled, however truthy that default is. Neither is a disabled flag, a missing flag, or an SDK that has not initialised.
+2. The value is truthy under JAVASCRIPT rules, because the reference engine is TypeScript and the answer has to be identical in every A vs B SDK: `false`, `0`, `-0`, `NaN`, `""`, and null are falsy. Everything else is truthy, INCLUDING the string `"false"`, the string `"0"`, an empty list, and an empty dictionary.
+
+`Exists()` is false for `NotFound` and `NotReady`, and true for everything else including `Disabled`.
+
+### `EvaluationSource`
+
+```csharp
+public enum EvaluationSource
+{
+    DatafileOverride,   // "datafileOverride"
+    RuntimeOverride,    // "runtimeOverride"
+    Sticky,             // "sticky"
+    Rule,               // "rule"
+    Holdout,            // "holdout"
+    Bandit,             // "bandit"
+    Default,            // "default"
+    NotFound,           // "not_found"
+    Disabled,           // "disabled"
+    NotReady,           // "not_ready"
+}
+```
+
+`NotReady` is the one to know about: init has not completed, the fetch failed with no bootstrap, or the client was disposed. It is deliberately NOT `NotFound`, because "the flag does not exist" sent people hunting through the dashboard for a flag that was there all along.
+
+Helpers: `source.WireValue()`, `source.IsDecided()`, `source.IsUnknownFlag()`, and `EvaluationSourceExtensions.FromWire(string)`.
 
 ---
 
 ## 7. Tracking events
 
 ```csharp
-using Avsb.SDK;
+void Track(string eventName, EvalContext? context = null, TrackPayload? payload = null);
+Task TrackPurchaseAsync(EvalContext? context, PurchaseOrder order);
+Task FlushEventsAsync();
+```
 
-server.Track("purchase_completed", ctx, new TrackPayload
+```csharp
+server.Track("signup_completed", ctx);
+server.Track("cart_value", ctx, new TrackPayload { Value = 129.50 });
+server.Track("upgrade", ctx, new TrackPayload { Revenue = 49.00 });
+
+await server.TrackPurchaseAsync(ctx, new PurchaseOrder
 {
-    Value      = 49.99,
-    Properties = new Dictionary<string, object?> { ["plan"] = "pro", ["currency"] = "usd" },
+    OrderId = "ORD-1001",
+    Total = 99.95,
+    Currency = "USD",
+    Items = new[] { new PurchaseOrderItem { Sku = "SKU-1", Price = 99.95, Quantity = 1 } },
 });
 ```
 
-`Value` maps to the numeric metric quantity. `Properties` is forwarded as-is to the collection endpoint. Both are optional.
+- `eventName` is the metric key as configured in the dashboard. An unknown key is accepted and stored, so a typo shows up as an empty metric rather than an error.
+- Money is DECIMAL MAJOR UNITS as displayed: `99.95`, not `9995`.
+- Metric events carry no free-form properties. The ingestion body has no such field, so anything sent under that name would look delivered and be gone. Put the number in `TrackPayload.Value` and segment on registered context attributes instead.
+- Purchases are sent immediately rather than batched.
+
+`Track` used to log a line and drop the event. Every AB test, bandit, and holdout decision now also records an exposure automatically; without exposures a server-side experiment produces no results. Set `Tracking = false` to turn all of it off, and `Track` then says so in a warning rather than dropping silently.
 
 ---
 
-## 8. Error handling
+## 8. Errors and diagnostics
 
-`AvsbServer` accepts `Microsoft.Extensions.Logging.ILogger` via `AvsbServerOptions.Logger`:
+- **Datafile fetch failure** logs the URL tried, the status, what a 404 or 403 usually means, and a `curl -i` line that reproduces it.
+- **A key that is not shaped like an SDK key** logs at construction and names what it looks like instead (a URL, an API token, a truncated copy).
+- **An empty bucketing key** warns once per client, naming `EvalContext.User("<your user id>")`.
+- **A dropped event** names the event and says why sending is not running.
+- **A bandit rule that cannot dispatch** appends a reason naming the rule.
+- **A type mismatch** logs the flag, the declared type, and the getter to use instead.
 
-```csharp
-using Microsoft.Extensions.Logging;
+Logging goes through `ILogger` when you supply one. When you do not, the SDK does NOT go silent: it writes warnings and errors to standard error, and drops to silence only when `ASPNETCORE_ENVIRONMENT`, `DOTNET_ENVIRONMENT`, or `AVSB_ENV` names the process production. Pass `NullLogger.Instance` to silence it explicitly.
 
-ILogger<AvsbServer> logger = loggerFactory.CreateLogger<AvsbServer>();
+### Decision log
 
-var server = new AvsbServer(new AvsbServerOptions
-{
-    SdkKey = Environment.GetEnvironmentVariable("AVSB_SDK_KEY")!,
-    Logger = logger,
-});
-```
-
-When using the DI extension, the `ILogger<AvsbServer>` is resolved from the container automatically.
-
-`InitAsync` returns an `InitResult` record; it never throws:
+Every evaluation appends one entry, so you have an audit trail for "why did that user see that variation".
 
 ```csharp
-public sealed record InitResult
+foreach (DecisionLogEntry entry in server.DecisionLogEntries)
 {
-    public bool              Success  { get; init; }
-    public InitResultSource  Source   { get; init; }  // Network | Bootstrap | Timeout | Error
-    public bool              Degraded { get; init; }
-    public Exception?        Error    { get; init; }
+    Console.WriteLine($"{entry.FlagKey} -> {entry.VariationKey} ({entry.Source.WireValue()})");
 }
 ```
 
-`Get*Flag` methods never throw. Evaluation failures produce `Source == NotFound` with `Value` equal to the supplied default.
+The log is BOUNDED: it keeps the most recent 1000 entries and drops the oldest, so a service that never reads it pays a fixed cost rather than leaking. Change the bound with `DecisionLogCapacity`, or pass 0 to turn recording off.
 
 ---
 
-## 9. ASP.NET Core integration
-
-### DI registration (`Program.cs`)
+## 9. ASP.NET Core
 
 ```csharp
 builder.Services.AddAvsb(options =>
@@ -221,231 +313,168 @@ builder.Services.AddAvsb(options =>
     options.SdkKey = builder.Configuration["Avsb:SdkKey"]!;
 });
 
-// Initialise at startup (before app.Run):
-await app.Services.GetRequiredService<AvsbServer>().InitAsync();
-```
+var app = builder.Build();
+app.UseMiddleware<AvsbMiddleware>();
 
-### Middleware
-
-```csharp
-app.UseAvsb();
-```
-
-`AvsbMiddleware` resolves an `EvalContext` from `HttpContext.User.Identity.Name` and stores it in `HttpContext.Items`. Override the context before the middleware runs if you need custom attribute resolution.
-
-### Retrieving the context in a controller or minimal API
-
-```csharp
 app.MapGet("/checkout", (HttpContext http, AvsbServer avsb) =>
 {
-    var ctx  = http.GetAvsbContext();            // extension method on HttpContext
-    var flag = avsb.GetBoolFlag("checkout-v2", false, ctx);
-    return Results.Ok(new { newCheckout = flag.IsEnabled() });
+    EvalContext ctx = http.GetAvsbContext();
+    return avsb.GetBoolFlag("checkout-v2", false, ctx).IsEnabled() ? "v2" : "v1";
 });
 ```
 
-Or inject `AvsbServer` as a constructor dependency in a controller:
-
-```csharp
-[ApiController]
-public class CheckoutController : ControllerBase
-{
-    private readonly AvsbServer _avsb;
-
-    public CheckoutController(AvsbServer avsb)
-    {
-        _avsb = avsb;
-    }
-
-    [HttpGet("/checkout")]
-    public IActionResult Index()
-    {
-        var ctx  = HttpContext.GetAvsbContext();
-        var flag = _avsb.GetBoolFlag("checkout-v2", false, ctx);
-        return View(new CheckoutViewModel { UseNewCheckout = flag.IsEnabled() });
-    }
-}
-```
+`AvsbMiddleware` binds a user context from `HttpContext.User.Identity.Name`. Override it per request with `http.SetAvsbContext(...)` before the middleware runs.
 
 ---
 
-## 10. Graceful shutdown
-
-`AvsbServer` implements `IAsyncDisposable`. Register it via `AddAvsb` and the DI container disposes it automatically on application shutdown.
-
-For manual lifecycle management:
+## 10. Sticky bucketing
 
 ```csharp
-await using var server = new AvsbServer(options);
-await server.InitAsync();
-// ... serve requests ...
-// DisposeAsync stops polling and flushes buffered decision log entries.
+public interface IStickyBucketService
+{
+    StickyAssignment? Lookup(string userId, string flagKey);
+    void Save(string userId, string flagKey, StickyAssignment assignment);
+}
 ```
 
-Or use `IHostApplicationLifetime` for explicit SIGTERM handling:
+```csharp
+options.StickyBucketService = new InMemoryStickyBucketService();
+```
+
+How it behaves:
+
+- The lookup runs BEFORE the evaluator, so a stored assignment wins over a rule and over a datafile override. Nothing ever called `Lookup` before this release.
+- A save happens ONLY for an `ab_test` rule that served a variation. It used to save on every rule type, including holdouts.
+- What is stored is the variation's ID. It used to store the KEY, which corrupts the store, because `Lookup` resolves by id and would never match again.
+- A stored variation that has since been deleted is treated as a MISS and the evaluator answers instead.
+- A stored variation whose rule is gone is still served, with a warning and no exposure, because the rule it would be attributed to no longer exists.
+
+---
+
+## 11. Bandits
+
+A `bandit` rule dispatches through the bandit engine. With no model store configured the engine runs its documented cold-start policy, so a bandit rule serves a real decision from day one instead of behaving like a rule that never matched (which is exactly what it did before: this evaluator had no `bandit` case at all).
 
 ```csharp
-lifetime.ApplicationStopping.Register(async () =>
+options.BanditModelStore = new InMemoryBanditModelStore(new Dictionary<string, BanditEvaluator.BanditModel>
 {
-    await server.DisposeAsync();
+    ["checkout-copy-bandit"] = new()
+    {
+        Version = "v1",
+        Algorithm = "ucb1",
+        PerAction = new Dictionary<string, BanditEvaluator.PerActionStats>
+        {
+            ["action_bold"] = new() { Mean = 0.42, Variance = 0.05, Samples = 800 },
+            ["action_plain"] = new() { Mean = 0.31, Variance = 0.05, Samples = 790 },
+        },
+    },
 });
 ```
 
+Every path a bandit rule can take appends a reason: dispatched, no config, unresolvable `banditId`, no actions, no model in a supplied store, or an action pointing at a variation the flag no longer has.
+
 ---
 
-## 11. Testing
+## 12. Testing
 
-Use `InMemoryDatafileLoader` to supply a fake datafile without network access:
+Use `Bootstrap` with `Polling` and `Tracking` off, so a test never touches the network:
 
 ```csharp
-using Avsb.SDK;
-using Avsb.SDK.TestUtils;
-using Xunit;
-
-public class CheckoutFlagTests
+var server = new AvsbServer(new AvsbServerOptions
 {
-    private const string DatafileJson = """
-        {
-          "version": 2,
-          "sdkKey": "sdk-test",
-          "flags": [{
-            "id": "flag_checkout-v2",
-            "key": "checkout-v2",
-            "type": "boolean",
-            "enabled": true,
-            "defaultVariationId": "var_off",
-            "variations": [
-              {"id": "var_off", "key": "off", "value": false},
-              {"id": "var_on",  "key": "on",  "value": true}
-            ],
-            "rules": []
-          }],
-          "audiences": []
-        }
-        """;
+    SdkKey = "sdk_test_abcdefgh",
+    Bootstrap = datafileJson,
+    Polling = false,
+    Tracking = false,
+});
 
-    [Fact]
-    public void GetBoolFlag_ReturnsFlag_WhenFlagExists()
-    {
-        var datafile = InMemoryDatafileLoader.Load(DatafileJson);
-        var server   = new AvsbServer(new AvsbServerOptions
-        {
-            SdkKey            = "sdk-test",
-            BootstrapDatafile = datafile,
-        });
-
-        var ctx  = EvalContext.User("alice");
-        var flag = server.GetBoolFlag("checkout-v2", false, ctx);
-
-        Assert.True(flag.Exists());
-        Assert.NotNull(flag.VariationKey);
-    }
-}
+server.GetBoolFlag("checkout-v2", false, EvalContext.User("alice")).IsEnabled().Should().BeTrue();
 ```
 
-`InMemoryDatafileLoader.Load(json)` parses a JSON string. `InMemoryDatafileLoader.LoadFile(path)` reads from disk. Both return a `FlagDatafile` that can be passed as `BootstrapDatafile` in `AvsbServerOptions`.
+`InMemoryDatafileLoader.Load(json)` and `.LoadFile(path)` parse a datafile directly when you want to exercise `Evaluator` without a client.
 
-Run the test suite:
+### Conformance
 
-```bash
-dotnet test packages/avsb-dotnet/tests/Avsb.SDK.Tests/
-```
+`tests/Avsb.SDK.Tests/ConformanceTests.cs` runs the shared A vs B conformance corpus: the same datafiles, contexts, and expected outcomes every other A vs B SDK runs, generated from the TypeScript reference engine. Values, variation keys, sources, rule ids, rule types, and the exact ordered reason strings are all compared, and values are compared STRUCTURALLY by JSON kind rather than by text.
 
-The conformance test loads all fixtures from `packages/avsb-conformance/fixtures/manifest.json` automatically.
+A missing or empty corpus FAILS the build.
 
 ---
 
-## 12. Migration from LaunchDarkly / Statsig
-
-### From LaunchDarkly .NET SDK
+## 13. OpenFeature
 
 ```csharp
-// LaunchDarkly
-using LaunchDarkly.Sdk;
-using LaunchDarkly.Sdk.Server;
+await Api.Instance.SetProviderAsync(new AvsbOpenFeatureProvider(server));
+FeatureClient client = Api.Instance.GetClient();
 
-var client  = new LdClient("sdk-key");
-var context = Context.New("alice");
-var value   = client.BoolVariation("checkout-v2", context, false);
+bool enabled = await client.GetBooleanValueAsync("checkout-v2", false,
+    EvaluationContext.Builder().SetTargetingKey("user_42").Build());
 ```
 
-```csharp
-// A vs B
-using Avsb.SDK;
-
-var server = new AvsbServer(new AvsbServerOptions { SdkKey = "sdk-key" });
-await server.InitAsync();
-
-var ctx   = EvalContext.User("alice", attributes: new Dictionary<string, object?> { ["plan"] = "pro" });
-var value = server.GetBoolFlag("checkout-v2", false, ctx).Value;
-```
+Context mapping, including the kinds OpenFeature has no native concept of:
 
 ```csharp
-// LaunchDarkly (multi-context)
-var multi = Context.MultiBuilder()
-    .Add(Context.New("alice"))
-    .Add(Context.Builder("acme").Kind("organization").Set("tier", "enterprise").Build())
+// Multi-kind: organisation-keyed targeting survives the bridge.
+EvaluationContext ctx = EvaluationContext.Builder()
+    .SetTargetingKey("user_42")
+    .Set("kind", "multi")
+    .Set("user", new Structure(new Dictionary<string, Value> { ["key"] = new("user_42") }))
+    .Set("organization", new Structure(new Dictionary<string, Value>
+    {
+        ["key"] = new("org_7"),
+        ["tier"] = new("enterprise"),
+    }))
+    .Build();
+
+// Single non-user kind.
+EvaluationContext orgCtx = EvaluationContext.Builder()
+    .SetTargetingKey("org_7")
+    .Set("kind", "organization")
+    .Set("tier", "enterprise")
     .Build();
 ```
 
-```csharp
-// A vs B (multi-context)
-var ctx = EvalContext.FromMulti(new MultiContext
-{
-    Contexts = new Dictionary<string, SingleContext>
-    {
-        ["user"]         = new SingleContext { Kind = "user",         Key = "alice" },
-        ["organization"] = new SingleContext { Kind = "organization", Key = "acme",
-            Attributes = new Dictionary<string, object?> { ["tier"] = "enterprise" } },
-    }
-});
-```
+Error codes are mapped so an OpenFeature caller can tell the two failures apart: an SDK with no datafile yet reports `PROVIDER_NOT_READY`, and a missing flag reports `FLAG_NOT_FOUND`.
 
-Key differences:
-- `GetBoolFlag` requires an explicit `defaultValue`. No untyped `.Variation()` method.
-- Returns `Flag<T>` with full metadata. No separate `BoolVariationDetail()` call needed.
-- `EvalContext` is a sealed record, not a builder class.
-- `InitAsync` returns `InitResult` instead of throwing.
+---
 
-### From Statsig .NET SDK
+## 14. Shutdown
 
 ```csharp
-// Statsig
-await StatsigServer.Initialize("secret-key");
-var user  = new StatsigUser { UserID = "alice" };
-var gate  = StatsigServer.CheckGate(user, "checkout-v2");
+await server.DisposeAsync();
 ```
 
-```csharp
-// A vs B
-var ctx  = EvalContext.User("alice", attributes: new Dictionary<string, object?> { ["plan"] = "pro" });
-var gate = server.GetBoolFlag("checkout-v2", false, ctx).IsEnabled();
-```
+Stops the polling loop, flushes queued events, and puts the client into a not-ready state. In ASP.NET Core the DI container disposes the singleton for you at shutdown.
 
-```csharp
-// Statsig (log event)
-StatsigServer.LogEvent(user, "purchase", value: "49.99",
-    metadata: new Dictionary<string, string> { ["plan"] = "pro" });
-```
+---
 
-```csharp
-// A vs B (track event)
-server.Track("purchase", ctx, new TrackPayload
-{
-    Value      = 49.99,
-    Properties = new Dictionary<string, object?> { ["plan"] = "pro" },
-});
-```
+## 15. Migrating
 
-### OpenFeature provider
+### From the LaunchDarkly .NET SDK
 
-```csharp
-using OpenFeature;
-using Avsb.SDK;
+| LaunchDarkly | A vs B |
+| --- | --- |
+| `new LdClient(config)` | `new AvsbServer(new AvsbServerOptions { SdkKey = key })` then `await server.InitAsync()` |
+| `client.BoolVariation(key, ctx, false)` | `server.GetBoolFlag(key, false, ctx).Value` |
+| `client.BoolVariationDetail(...)` | `server.GetBoolFlag(...)` returns the detail already |
+| `Context.New("user-key")` | `EvalContext.User("user-key")` |
+| `Context.NewMulti(a, b)` | `EvalContext.FromMulti(new MultiContext { ... })` |
+| `client.Track("event", ctx)` | `server.Track("event", ctx)` |
+| `client.Dispose()` | `await server.DisposeAsync()` |
 
-Api.Instance.SetProvider(new AvsbOpenFeatureProvider(server));
-var client = Api.Instance.GetClient();
+### From the Statsig .NET SDK
 
-var value = await client.GetBooleanValueAsync("checkout-v2", false,
-    new EvaluationContext { TargetingKey = "alice" });
-```
+| Statsig | A vs B |
+| --- | --- |
+| `StatsigServer.Initialize(secret)` | `await new AvsbServer(options).InitAsync()` |
+| `StatsigServer.CheckGate(user, "gate")` | `server.GetBoolFlag("gate", false, ctx).IsEnabled()` |
+| `StatsigServer.GetConfig(user, "config")` | `server.GetJsonFlag<T>("config", fallback, ctx).Value` |
+| `new StatsigUser { UserID = "id" }` | `EvalContext.User("id")` |
+| `StatsigServer.LogEvent(user, "event")` | `server.Track("event", ctx)` |
+| `StatsigServer.Shutdown()` | `await server.DisposeAsync()` |
+
+---
+
+## 16. Licence
+
+MIT. See [LICENSE](./LICENSE).

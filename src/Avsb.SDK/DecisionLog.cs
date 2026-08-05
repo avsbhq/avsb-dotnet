@@ -37,12 +37,41 @@ public sealed record DecisionLogEntry
 /// <summary>Kind + key summary of one sub-context. Attributes are never logged.</summary>
 public sealed record ContextSummaryEntry(string Kind, string Key);
 
-/// <summary>Accumulated decision log for an SDK instance. Mirrors §2.5 DecisionLog.</summary>
+/// <summary>
+/// Bounded, append-only decision log for one client. Mirrors DecisionLog in types.ts.
+///
+/// BOUNDED is the important word. An unbounded collector grows for the life of the process unless
+/// the caller discovers a flush method, which is a memory leak installed by default in a
+/// long-running server. This keeps the most recent <see cref="Capacity"/> entries and drops the
+/// oldest, so a service that never reads the log pays a fixed cost.
+/// </summary>
 public sealed class DecisionLog
 {
-    private readonly List<DecisionLogEntry> _entries = new();
+    /// <summary>Entries retained when the caller does not choose.</summary>
+    public const int DefaultCapacity = 1_000;
+
+    private readonly Queue<DecisionLogEntry> _entries;
     private readonly object _lock = new();
 
+    /// <param name="capacity">
+    /// How many entries to retain. Zero disables recording entirely, which is what a caller who
+    /// never reads the log should pick.
+    /// </param>
+    public DecisionLog(int capacity = DefaultCapacity)
+    {
+        if (capacity < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(capacity),
+                "DecisionLog capacity must not be negative.");
+        }
+        Capacity = capacity;
+        _entries = new Queue<DecisionLogEntry>();
+    }
+
+    /// <summary>How many entries this log retains before dropping the oldest.</summary>
+    public int Capacity { get; }
+
+    /// <summary>All retained entries in append order. Immutable snapshot.</summary>
     public IReadOnlyList<DecisionLogEntry> Entries
     {
         get
@@ -53,7 +82,32 @@ public sealed class DecisionLog
 
     internal void Add(DecisionLogEntry entry)
     {
-        lock (_lock) _entries.Add(entry);
+        lock (_lock)
+        {
+            if (Capacity == 0) return;
+            while (_entries.Count >= Capacity) _entries.Dequeue();
+            _entries.Enqueue(entry);
+        }
+    }
+
+    /// <summary>Drop every retained entry.</summary>
+    public void Clear()
+    {
+        lock (_lock) _entries.Clear();
+    }
+
+    /// <summary>
+    /// Take every retained entry and clear the log, for callers that ship the audit trail
+    /// somewhere on a timer.
+    /// </summary>
+    public IReadOnlyList<DecisionLogEntry> Drain()
+    {
+        lock (_lock)
+        {
+            DecisionLogEntry[] snapshot = _entries.ToArray();
+            _entries.Clear();
+            return snapshot;
+        }
     }
 
     /// <summary>Redact private attribute values in reason strings.</summary>

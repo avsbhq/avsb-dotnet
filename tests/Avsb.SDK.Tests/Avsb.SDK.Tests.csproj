@@ -18,5 +18,13 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.0" />
+    <!--
+      OpenFeature is declared PrivateAssets="all" in Avsb.SDK.csproj, so it does not flow to this
+      project transitively and the provider tests would not compile without it here. Referencing
+      it explicitly is also what lets those tests run against the REAL OpenFeature SDK rather than
+      exercising the provider class in isolation, which is how the Python port's protocol gap went
+      unnoticed (spec WS4 item 9).
+    -->
+    <PackageReference Include="OpenFeature" Version="1.5.0" />
   </ItemGroup>
 </Project>

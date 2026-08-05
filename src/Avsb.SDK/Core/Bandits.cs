@@ -1,19 +1,30 @@
 namespace Avsb.SDK.Core;
 
 /// <summary>
-/// Bandit evaluation engine — epsilon-greedy, Thompson sampling, UCB1.
-/// Mirrors bandits.ts. All stochastic steps are seeded from murmurhash3
-/// so every (banditKey, context) pair produces a stable decision.
+/// Bandit evaluation engine: epsilon-greedy, Thompson sampling, UCB1.
+///
+/// Mirrors bandits.ts. All stochastic steps are seeded from murmurhash3, so every
+/// (banditKey, context) pair produces a stable decision: that is what makes a bandit decision
+/// replayable during incident triage and assertable in a fixture.
+///
+/// Public because a caller supplies learned models through <see cref="IAvsbBanditModelStore"/>.
 /// </summary>
-internal static class BanditEvaluator
+public static class BanditEvaluator
 {
     private const int MaxBucket = 10_000;
     private const long HashRange = 0x100000000L; // 2^32
 
+    /// <summary>Epsilon used when the bandit config does not publish one.</summary>
+    public const double DefaultExplorationRate = 0.1;
+
     // -----------------------------------------------------------------------
-    // Public model + store shapes.
+    // Model shapes.
     // -----------------------------------------------------------------------
 
+    /// <summary>
+    /// Per-action reward statistics. Variance defaults to 1 for an unseen action so Thompson
+    /// sampling still has a defined scale.
+    /// </summary>
     public sealed class PerActionStats
     {
         public double Mean { get; set; }
@@ -21,18 +32,17 @@ internal static class BanditEvaluator
         public int Samples { get; set; }
     }
 
+    /// <summary>
+    /// A learned bandit model. ContextualModels holds optional per-context-bucket override maps,
+    /// keyed by the "key=value;key=value" bucket string derived from the actions' declared
+    /// contextAttributes.
+    /// </summary>
     public sealed class BanditModel
     {
         public string Version { get; set; } = string.Empty;
         public string Algorithm { get; set; } = string.Empty;
         public Dictionary<string, PerActionStats> PerAction { get; set; } = new();
         public Dictionary<string, Dictionary<string, PerActionStats>>? ContextualModels { get; set; }
-    }
-
-    public interface IBanditModelStore
-    {
-        BanditModel? GetModel(string banditKey);
-        void UpdateModel(string banditKey, BanditModel model);
     }
 
     // -----------------------------------------------------------------------
@@ -224,11 +234,16 @@ internal static class BanditEvaluator
         public string ModelVersion { get; init; } = string.Empty;
     }
 
+    /// <summary>
+    /// Run a bandit and return the chosen action, or null when the supplied store has no model
+    /// for <paramref name="banditKey"/>. The evaluator turns that null into a reason naming the
+    /// rule rather than dropping it.
+    /// </summary>
     public static BanditDecision? EvaluateBandit(
         string banditKey,
         BanditConfig config,
         EvalContext ctx,
-        IBanditModelStore store)
+        IAvsbBanditModelStore store)
     {
         var model = store.GetModel(banditKey);
         if (model is null) return null;
@@ -313,7 +328,11 @@ internal static class BanditEvaluator
 
     private static string ResolveContextAttribute(EvalContext ctx, string key)
     {
-        var val = ContextHelper.ResolveDottedAttribute(ctx, key);
-        return val?.ToString() ?? string.Empty;
+        object? val = ContextHelper.ResolveDottedAttribute(ctx, key);
+        // The reference only stringifies strings and numbers into a contextual bucket key;
+        // anything else contributes an empty value.
+        return val is string or double or float or int or long or short or decimal
+            ? JsNumber.StringOf(val)
+            : string.Empty;
     }
 }

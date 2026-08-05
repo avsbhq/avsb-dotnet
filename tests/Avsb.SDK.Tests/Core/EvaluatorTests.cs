@@ -1,9 +1,17 @@
+using System.Text.Json;
 using Avsb.SDK.Core;
 using Avsb.SDK.TestUtils;
 using FluentAssertions;
 
 namespace Avsb.SDK.Tests.Core;
 
+/// <summary>
+/// Note on value assertions: EvalResult.Value carries the datafile's variation value as a
+/// JsonElement whenever a variation was served, and the caller's own CLR default only when the
+/// datafile could not answer. Keeping the JsonElement is what lets GetJsonFlag&lt;T&gt;
+/// deserialise directly instead of round-tripping through a string, so these assertions unwrap it
+/// by JSON kind rather than comparing a boxed object.
+/// </summary>
 public sealed class EvaluatorTests
 {
     private static readonly string FixturesRoot = Path.GetFullPath(
@@ -20,6 +28,7 @@ public sealed class EvaluatorTests
         var ctx = EvalContext.User("alice");
         var result = Evaluator.EvaluateFlag("does-not-exist", false, ctx, df);
         result.Source.Should().Be(EvaluationSource.NotFound);
+        // No variation was served, so this is the caller's own CLR default, not a JsonElement.
         result.Value.Should().Be(false);
         result.VariationKey.Should().BeNull();
     }
@@ -32,7 +41,7 @@ public sealed class EvaluatorTests
         var ctx = EvalContext.User("any_user");
         var result = Evaluator.EvaluateFlag("feature-off", true, ctx, df);
         result.Source.Should().Be(EvaluationSource.Disabled);
-        result.Value.Should().Be(false);
+        ((JsonElement)result.Value!).GetBoolean().Should().BeFalse();
         result.VariationKey.Should().Be("control");
     }
 
@@ -44,7 +53,7 @@ public sealed class EvaluatorTests
         var ctx = EvalContext.User("user_42");
         var result = Evaluator.EvaluateFlag("feature-overridden", "caller-default", ctx, df);
         result.Source.Should().Be(EvaluationSource.DatafileOverride);
-        result.Value.Should().Be("forced-on");
+        ((JsonElement)result.Value!).GetString().Should().Be("forced-on");
         result.VariationKey.Should().Be("forced");
     }
 
@@ -58,7 +67,7 @@ public sealed class EvaluatorTests
         var result = Evaluator.EvaluateFlag("paid-only-feature", false, ctx, df);
         result.Source.Should().Be(EvaluationSource.Rule);
         result.RuleType.Should().Be(RuleType.TargetedDelivery);
-        result.Value.Should().Be(true);
+        ((JsonElement)result.Value!).GetBoolean().Should().BeTrue();
         result.VariationKey.Should().Be("on");
     }
 
@@ -71,7 +80,8 @@ public sealed class EvaluatorTests
             attributes: new Dictionary<string, object?> { ["plan"] = "free" });
         var result = Evaluator.EvaluateFlag("paid-only-feature", false, ctx, df);
         result.Source.Should().Be(EvaluationSource.Default);
-        result.Value.Should().Be(false);
+        // The flag's own default variation was served, so this is that variation's value.
+        ((JsonElement)result.Value!).GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -83,7 +93,7 @@ public sealed class EvaluatorTests
         result.Source.Should().Be(EvaluationSource.Rule);
         result.RuleType.Should().Be(RuleType.AbTest);
         result.VariationKey.Should().Be("control");
-        result.Value.Should().Be("old");
+        ((JsonElement)result.Value!).GetString().Should().Be("old");
     }
 
     [Fact]
@@ -105,7 +115,7 @@ public sealed class EvaluatorTests
         var result = Evaluator.EvaluateFlag("feature-with-holdout", false, ctx, df);
         result.Source.Should().Be(EvaluationSource.Holdout);
         result.RuleType.Should().Be(RuleType.Holdout);
-        result.Value.Should().Be(false);
+        ((JsonElement)result.Value!).GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -123,7 +133,7 @@ public sealed class EvaluatorTests
         });
         var result = Evaluator.EvaluateFlag("org-enterprise-feature", false, ctx, df);
         result.Source.Should().Be(EvaluationSource.Rule);
-        result.Value.Should().Be(true);
+        ((JsonElement)result.Value!).GetBoolean().Should().BeTrue();
     }
 
     [Fact]
@@ -141,6 +151,7 @@ public sealed class EvaluatorTests
         });
         var result = Evaluator.EvaluateFlag("org-enterprise-feature", false, ctx, df);
         result.Source.Should().Be(EvaluationSource.Default);
-        result.Value.Should().Be(false);
+        // The flag's own default variation was served, so this is that variation's value.
+        ((JsonElement)result.Value!).GetBoolean().Should().BeFalse();
     }
 }

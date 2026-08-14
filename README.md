@@ -55,7 +55,7 @@ server.Track("signup_completed", EvalContext.User("user_42"));
 await server.DisposeAsync();   // stops polling and flushes queued events
 ```
 
-Copy your SDK key from the A vs B dashboard: Settings, then Environments. Keys look like `sdk_production_ttqm0eaj4vth1krcb2xn`. Nothing else is required: the datafile URL, the ingest endpoint, and the heartbeat endpoint are all derived.
+Copy your SDK key from the A vs B dashboard: Environments in the project sidebar. Keys look like `sdk_production_ttqm0eaj4vth1krcb2xn`. Nothing else is required: the datafile URL, the ingest endpoint, and the heartbeat endpoint are all derived.
 
 ---
 

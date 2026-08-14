@@ -10,7 +10,7 @@ namespace Avsb.SDK;
 public sealed record AvsbServerOptions
 {
     /// <summary>
-    /// SDK key issued by the A vs B dashboard (Settings, then Environments). Looks like
+    /// SDK key issued by the A vs B dashboard (Environments in the project sidebar). Looks like
     /// sdk_production_ttqm0eaj4vth1krcb2xn.
     /// </summary>
     public string SdkKey { get; init; } = string.Empty;

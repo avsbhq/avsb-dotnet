@@ -722,7 +722,7 @@ public sealed class AvsbServer : IAsyncDisposable
         if (status == 404)
         {
             message.Append("A 404 means the key is not published in this environment: check the SDK"
-                + " key against Settings, then Environments, in the A vs B dashboard, and publish"
+                + " key against Environments in the project sidebar, in the A vs B dashboard, and publish"
                 + " the environment if it has never been published. ");
         }
         else if (status == 403)

@@ -2,7 +2,8 @@
 // Implements the OpenFeature FeatureProvider contract so AvsB integrates with any
 // OpenFeature-aware framework.
 //
-// Requires: OpenFeature 1.5+.
+// Requires: OpenFeature 2.0+. The Resolve*ValueAsync overrides below, with a CancellationToken,
+// are the 2.x contract; 1.x named them Resolve*Value, so pinning 1.5 broke the net8.0 build.
 
 using System.Text.Json;
 using OpenFeature;
@@ -20,11 +21,11 @@ namespace Avsb.SDK;
 ///   targetingKey) is that kind's bucketing key and its remaining members become that kind's
 ///   attributes.
 /// - kind: "organization" with a targeting key builds a single context of that kind, so a flag
-///   bucketed by organisation buckets by organisation.
+///   bucketed by organization buckets by organization.
 /// - No kind builds a user context from the targeting key.
 ///
 /// Collapsing everything to a user context, which this provider used to do, silently lost
-/// organisation-keyed bucketing: A vs B's headline targeting feature, evaluated as if it had never
+/// organization-keyed bucketing: A vs B's headline targeting feature, evaluated as if it had never
 /// been configured.
 ///
 /// Error codes are mapped so an OpenFeature caller can tell the two failures apart: an SDK with no

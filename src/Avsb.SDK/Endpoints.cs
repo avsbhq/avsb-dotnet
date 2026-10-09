@@ -253,8 +253,8 @@ public static class Endpoints
         {
             throw new ArgumentException(
                 $"{fnName} was called without an SDK key. Pass the environment SDK key (it looks "
-                + "like \"sdk_production_xxxxxxxx\"), which you can copy from Settings, then "
-                + "Environments, in the A vs B dashboard.",
+                + "like \"sdk_production_xxxxxxxx\"), which you can copy from Environments in the "
+                + "project sidebar of the A vs B dashboard.",
                 nameof(sdkKey));
         }
 

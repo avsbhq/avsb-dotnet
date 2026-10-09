@@ -14,9 +14,9 @@ namespace Avsb.SDK.Tests;
 /// </summary>
 public sealed class AvsbServerTests
 {
-    private static readonly string FixturesRoot = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..", "avsb-conformance", "fixtures"));
+    // Resolved once, by walking upward to the corpus (see ConformanceFixtures): a fixed count of
+    // ".." segments from the build output landed one directory short.
+    private static string FixturesRoot => ConformanceFixtures.Root;
 
     private static AvsbServer BuildServerWithDatafile(string fixtureName)
     {

@@ -3,7 +3,7 @@
     <TargetFrameworks>netstandard2.1;net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <PackageId>Avsb.SDK</PackageId>
     <Authors>AvsB</Authors>
     <Company>AvsB Platform</Company>
@@ -16,6 +16,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>feature-flags;experimentation;ab-testing;openfeature;dotnet</PackageTags>
+    <PackageReleaseNotes>1.0.1: targeted delivery rules honour their traffic allocation, so a 30 percent rollout serves 30 percent of its audience (it served everyone before), hashed exactly like every other A vs B SDK. The package builds for netstandard2.1 and net8.0, and the OpenFeature provider targets OpenFeature 2.x.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -32,9 +33,23 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
-    <PackageReference Include="StackExchange.Redis" Version="2.7.0" PrivateAssets="all" />
-    <PackageReference Include="OpenFeature" Version="1.5.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
+    <!-- 2.7.0 was never published; restore silently resolved 2.7.4 (NU1603). -->
+    <PackageReference Include="StackExchange.Redis" Version="2.7.4" PrivateAssets="all" />
+    <!--
+      The provider overrides the OpenFeature 2.x contract (ResolveBooleanValueAsync and friends,
+      with a CancellationToken). 1.5.0 defines ResolveBooleanValue instead, so pinning it broke
+      the net8.0 build. 2.0.0 is the floor the provider compiles against, which keeps it usable
+      with any OpenFeature 2.x the application brings.
+    -->
+    <PackageReference Include="OpenFeature" Version="2.0.0" PrivateAssets="all" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.0" PrivateAssets="all" />
+  </ItemGroup>
+  <!--
+    netstandard2.1 has no System.Text.Json in the framework (net8.0 does), so it comes in as a
+    package there. Without it the netstandard2.1 build failed on every JSON type.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
   </ItemGroup>
 </Project>

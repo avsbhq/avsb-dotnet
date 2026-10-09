@@ -9,10 +9,27 @@ public sealed class AudienceTests
     private static FlagDatafileAudience BuildAudience(string attribute, string op, string value,
         string? contextKind = null)
     {
-        var conditionJson = contextKind is null
-            ? $"{{\"id\":\"c\",\"type\":\"CUSTOM_ATTRIBUTE\",\"attribute\":\"{attribute}\",\"operator\":\"{op}\",\"value\":\"{value}\"}}"
-            : $"{{\"id\":\"c\",\"type\":\"CUSTOM_ATTRIBUTE\",\"attribute\":\"{attribute}\",\"operator\":\"{op}\",\"value\":\"{value}\",\"contextKind\":\"{contextKind}\"}}";
-        var json = $"{{\"id\":\"a\",\"rules\":{{\"id\":\"g\",\"logic\":\"AND\",\"conditions\":[{conditionJson}]}}}}";
+        // Serialised, not interpolated: a value such as the regex "^[a-z]+@example\.com$" must be
+        // JSON-escaped, and splicing it into a string literal produced invalid JSON.
+        var condition = new Dictionary<string, object?>
+        {
+            ["id"] = "c",
+            ["type"] = "CUSTOM_ATTRIBUTE",
+            ["attribute"] = attribute,
+            ["operator"] = op,
+            ["value"] = value,
+        };
+        if (contextKind is not null) condition["contextKind"] = contextKind;
+        var json = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["id"] = "a",
+            ["rules"] = new Dictionary<string, object?>
+            {
+                ["id"] = "g",
+                ["logic"] = "AND",
+                ["conditions"] = new[] { condition },
+            },
+        });
         return JsonSerializer.Deserialize<FlagDatafileAudience>(json, JsonOptions.Default)!;
     }
 

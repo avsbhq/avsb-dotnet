@@ -5,9 +5,18 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <!--
+      Run on the newest installed runtime when the .NET 8 runtime is absent (a machine with only
+      the .NET 9 SDK and runtime). Where .NET 8 is installed it still runs on .NET 8.
+    -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Avsb.SDK\Avsb.SDK.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Every test file uses [Fact] and [Theory] without its own `using Xunit;`. -->
+    <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
@@ -23,8 +32,8 @@
       project transitively and the provider tests would not compile without it here. Referencing
       it explicitly is also what lets those tests run against the REAL OpenFeature SDK rather than
       exercising the provider class in isolation, which is how the Python port's protocol gap went
-      unnoticed (spec WS4 item 9).
+      unnoticed (spec WS4 item 9). Same 2.x floor the SDK compiles against.
     -->
-    <PackageReference Include="OpenFeature" Version="1.5.0" />
+    <PackageReference Include="OpenFeature" Version="2.0.0" />
   </ItemGroup>
 </Project>

@@ -110,8 +110,11 @@ public sealed class DecisionLog
         }
     }
 
-    /// <summary>Redact private attribute values in reason strings.</summary>
-    public static DecisionLogEntry Redact(DecisionLogEntry entry, IReadOnlySet<string> privateAttributes)
+    /// <summary>
+    /// Redact private attribute values in reason strings. Takes any read-only collection (a
+    /// HashSet is one) because IReadOnlySet does not exist on netstandard2.1.
+    /// </summary>
+    public static DecisionLogEntry Redact(DecisionLogEntry entry, IReadOnlyCollection<string> privateAttributes)
     {
         if (privateAttributes.Count == 0) return entry;
 
@@ -128,7 +131,7 @@ public sealed class DecisionLog
         return entry with { Reasons = redactedReasons, Value = valueRedacted };
     }
 
-    private static string RedactReason(string reason, IReadOnlySet<string> privateAttributes)
+    private static string RedactReason(string reason, IReadOnlyCollection<string> privateAttributes)
     {
         foreach (var attr in privateAttributes)
         {

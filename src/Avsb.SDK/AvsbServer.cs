@@ -14,7 +14,7 @@ namespace Avsb.SDK;
 /// var server = new AvsbServer(new AvsbServerOptions { SdkKey = "sdk_production_xxxxxxxxxxxx" });
 /// await server.InitAsync();
 ///
-/// var flag = server.GetBoolFlag("checkout-v2", false, EvalContext.User("user_42"));
+/// var flag = server.GetBoolFlag("checkout_v2", false, EvalContext.User("user_42"));
 /// if (flag.IsEnabled()) { /* new checkout */ }
 ///
 /// server.Track("signup_completed", EvalContext.User("user_42"));
@@ -54,7 +54,9 @@ public sealed class AvsbServer : IAsyncDisposable
 
     public AvsbServer(AvsbServerOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        // A copy, so a caller that keeps and mutates its options object cannot change a running
+        // server underneath it (the options are settable for the ASP.NET Core pattern).
+        _options = (options ?? throw new ArgumentNullException(nameof(options))) with { };
         _logger = new AvsbLogger(options.Logger);
         _http = new HttpClient { Timeout = options.FetchTimeout ?? DefaultFetchTimeout };
         _decisionLog = new DecisionLog(options.DecisionLogCapacity);
@@ -471,7 +473,7 @@ public sealed class AvsbServer : IAsyncDisposable
             DurationMicros = ElapsedMicros(startTimestamp),
             ContextSummary = ContextHelper.ContextSummary(ctx),
         };
-        IReadOnlySet<string> privateAttrs = ContextHelper.PrivateAttributesFrom(ctx);
+        IReadOnlyCollection<string> privateAttrs = ContextHelper.PrivateAttributesFrom(ctx);
         _decisionLog.Add(privateAttrs.Count > 0
             ? Avsb.SDK.DecisionLog.Redact(entry, privateAttrs)
             : entry);
@@ -758,7 +760,7 @@ public sealed class AvsbServer : IAsyncDisposable
             {
                 // Jitter each cycle so a fleet that booted together does not stampede the CDN on
                 // the same second forever.
-                double jitterFactor = 1 + PollJitter * (Random.Shared.NextDouble() * 2 - 1);
+                double jitterFactor = 1 + PollJitter * (SharedRandom.NextDouble() * 2 - 1);
                 await Task.Delay(interval * jitterFactor, ct).ConfigureAwait(false);
                 await FetchAndApplyAsync(ct).ConfigureAwait(false);
             }

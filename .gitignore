@@ -1,0 +1,7 @@
+# Build output. `dotnet build`, `dotnet test` and `dotnet pack` write these
+# next to each project; none of it belongs in the repository.
+bin/
+obj/
+TestResults/
+*.nupkg
+*.snupkg

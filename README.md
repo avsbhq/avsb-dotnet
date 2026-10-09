@@ -14,11 +14,11 @@ ASP.NET Core wiring and an OpenFeature provider are included in the same package
 dotnet add package Avsb.SDK
 ```
 
-Required at runtime: `Microsoft.Extensions.Logging.Abstractions`. Everything else is optional and only needed if you use the matching feature:
+Required at runtime: `Microsoft.Extensions.Logging.Abstractions`, plus `System.Text.Json` on netstandard2.1 (net8.0 has it built in). Both come in with the package. Everything else is optional and only needed if you use the matching feature:
 
 | Package | Needed for |
 | --- | --- |
-| `OpenFeature` | `AvsbOpenFeatureProvider` |
+| `OpenFeature` 2.0 or later | `AvsbOpenFeatureProvider` |
 | `StackExchange.Redis` | `RedisStickyBucketService` |
 | `AWSSDK.DynamoDBv2` | `DynamoDBStickyBucketService` |
 | `Microsoft.AspNetCore.Http.Abstractions` | the ASP.NET Core middleware |
@@ -44,7 +44,7 @@ if (!init.Success)
     // the URL it tried, the status it got, and a curl to reproduce it.
 }
 
-Flag<bool> flag = server.GetBoolFlag("checkout-v2", false, EvalContext.User("user_42"));
+Flag<bool> flag = server.GetBoolFlag("checkout_v2", false, EvalContext.User("user_42"));
 if (flag.IsEnabled())
 {
     // new checkout
@@ -142,7 +142,7 @@ var ctx = EvalContext.User("user_42", attributes: new Dictionary<string, object?
 
 The `Key` is what buckets the user, so it must be stable for the same person. An empty key means every request lands in the same bucket, which corrupts an experiment invisibly, so the SDK warns once per client naming the call to add.
 
-### Multi-context, for organisation-keyed targeting
+### Multi-context, for organization-keyed targeting
 
 ```csharp
 var ctx = EvalContext.FromMulti(new MultiContext
@@ -319,7 +319,7 @@ app.UseMiddleware<AvsbMiddleware>();
 app.MapGet("/checkout", (HttpContext http, AvsbServer avsb) =>
 {
     EvalContext ctx = http.GetAvsbContext();
-    return avsb.GetBoolFlag("checkout-v2", false, ctx).IsEnabled() ? "v2" : "v1";
+    return avsb.GetBoolFlag("checkout_v2", false, ctx).IsEnabled() ? "v2" : "v1";
 });
 ```
 
@@ -388,7 +388,7 @@ var server = new AvsbServer(new AvsbServerOptions
     Tracking = false,
 });
 
-server.GetBoolFlag("checkout-v2", false, EvalContext.User("alice")).IsEnabled().Should().BeTrue();
+server.GetBoolFlag("checkout_v2", false, EvalContext.User("alice")).IsEnabled().Should().BeTrue();
 ```
 
 `InMemoryDatafileLoader.Load(json)` and `.LoadFile(path)` parse a datafile directly when you want to exercise `Evaluator` without a client.
@@ -403,18 +403,20 @@ A missing or empty corpus FAILS the build.
 
 ## 13. OpenFeature
 
+Works with the OpenFeature .NET SDK 2.0 or later (`dotnet add package OpenFeature`).
+
 ```csharp
 await Api.Instance.SetProviderAsync(new AvsbOpenFeatureProvider(server));
 FeatureClient client = Api.Instance.GetClient();
 
-bool enabled = await client.GetBooleanValueAsync("checkout-v2", false,
+bool enabled = await client.GetBooleanValueAsync("checkout_v2", false,
     EvaluationContext.Builder().SetTargetingKey("user_42").Build());
 ```
 
 Context mapping, including the kinds OpenFeature has no native concept of:
 
 ```csharp
-// Multi-kind: organisation-keyed targeting survives the bridge.
+// Multi-kind: organization-keyed targeting survives the bridge.
 EvaluationContext ctx = EvaluationContext.Builder()
     .SetTargetingKey("user_42")
     .Set("kind", "multi")

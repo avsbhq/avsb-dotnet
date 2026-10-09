@@ -8,9 +8,9 @@ namespace Avsb.SDK.Tests;
 
 public sealed class OpenFeatureProviderTests
 {
-    private static readonly string FixturesRoot = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..", "avsb-conformance", "fixtures"));
+    // Resolved once, by walking upward to the corpus (see ConformanceFixtures): a fixed count of
+    // ".." segments from the build output landed one directory short.
+    private static string FixturesRoot => ConformanceFixtures.Root;
 
     private static AvsbServer BuildServer(string fixtureName)
     {

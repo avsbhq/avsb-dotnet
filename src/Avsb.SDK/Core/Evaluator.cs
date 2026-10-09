@@ -21,8 +21,11 @@ namespace Avsb.SDK.Core;
 /// order. Numbers inside them go through <see cref="JsNumber"/> because they were produced by
 /// JavaScript string interpolation, and because a plain ToString() would emit a comma decimal
 /// separator on a machine with a European culture.
+///
+/// The traffic-allocation gate shared by ab_test and targeted_delivery rules lives in
+/// EvaluatorAllocation.cs.
 /// </summary>
-public static class Evaluator
+public static partial class Evaluator
 {
     public readonly struct EvalResult
     {
@@ -185,6 +188,16 @@ public static class Evaluator
                     // An empty variation list cannot serve anything. The reference skips it
                     // without a reason, so this does too.
                     if (rule.Variations.Count == 0) continue;
+                    // A targeted delivery rule below 100 percent is a ROLLOUT: serve the variation
+                    // to that share of the audience and let everyone else fall through to the next
+                    // rule, exactly as an ab_test rule's allocation does (N1-1). The gate sits after
+                    // the empty-variations skip, so a rule with nothing to serve stays silent.
+                    string? tdExclusion = AllocationExclusion(rule, hashValue, flagKey);
+                    if (tdExclusion is not null)
+                    {
+                        reasons.Add(tdExclusion);
+                        continue;
+                    }
                     var tv = GetVariationValue(flag, rule.Variations[0].VariationId);
                     reasons.Add($"rule \"{rule.Id}\" matched (targeted_delivery), serving variation"
                         + $" \"{KeyText(tv)}\"");
@@ -201,18 +214,11 @@ public static class Evaluator
 
                 case "ab_test":
                 {
-                    // Traffic allocation. The threshold is a FLOAT comparison against the raw
-                    // product, never a truncated or rounded integer (spec section 1.4). A 0.12345
-                    // rollout puts the threshold at 1234.5: bucket 1234 is inside it, while the
-                    // previous (uint) cast excluded that context and diverged by one bucket in ten
-                    // thousand, per rollout, undetectably.
-                    uint allocHash = Hash.Murmurhash3(hashValue + flagKey + "__" + rule.Id) % 10_000;
-                    if (rule.TrafficAllocation is not null
-                        && allocHash >= rule.TrafficAllocation.Value * 10_000)
+                    // Traffic allocation (see AllocationExclusion for the float-threshold rule).
+                    string? abExclusion = AllocationExclusion(rule, hashValue, flagKey);
+                    if (abExclusion is not null)
                     {
-                        reasons.Add($"rule \"{rule.Id}\" excluded by traffic allocation (hash"
-                            + $" {allocHash} >= threshold"
-                            + $" {JsNumber.Stringify(rule.TrafficAllocation.Value * 10_000)})");
+                        reasons.Add(abExclusion);
                         continue;
                     }
 

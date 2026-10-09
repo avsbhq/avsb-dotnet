@@ -87,9 +87,10 @@ internal static class ContextHelper
     }
 
     /// <summary>
-    /// Aggregate private attributes from all sub-contexts.
+    /// Aggregate private attributes from all sub-contexts, compared case-insensitively.
+    /// Typed as a read-only collection rather than IReadOnlySet, which netstandard2.1 lacks.
     /// </summary>
-    public static IReadOnlySet<string> PrivateAttributesFrom(EvalContext ctx)
+    public static IReadOnlyCollection<string> PrivateAttributesFrom(EvalContext ctx)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (ctx.IsMulti)

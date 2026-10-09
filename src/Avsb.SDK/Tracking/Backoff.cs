@@ -36,7 +36,7 @@ public static class Backoff
         }
 
         long baseDelay = Math.Min(MaxDelayMs, (long)(BaseDelayMs * Math.Pow(2, attempt - 1)));
-        double jitter = baseDelay * Jitter * (Random.Shared.NextDouble() * 2 - 1);
+        double jitter = baseDelay * Jitter * (SharedRandom.NextDouble() * 2 - 1);
         long delay = Math.Max(MinDelayMs, (long)Math.Round(baseDelay + jitter));
         return new State(attempt, delay);
     }

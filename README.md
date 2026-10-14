@@ -448,6 +448,8 @@ await server.DisposeAsync();
 
 Stops the polling loop, flushes queued events, and puts the client into a not-ready state. In ASP.NET Core the DI container disposes the singleton for you at shutdown.
 
+`AvsbServer` is also `IDisposable`, so `using var server = ...;` and a container disposed with `Dispose()` work. A synchronous `Dispose()` runs the same shutdown and waits up to 5 seconds for the final flush; if the ingest endpoint is slower than that, it logs a warning and the flush finishes in the background. Either call is safe to repeat, in either order.
+
 ---
 
 ## 15. Migrating
@@ -462,7 +464,7 @@ Stops the polling loop, flushes queued events, and puts the client into a not-re
 | `Context.New("user-key")` | `EvalContext.User("user-key")` |
 | `Context.NewMulti(a, b)` | `EvalContext.FromMulti(new MultiContext { ... })` |
 | `client.Track("event", ctx)` | `server.Track("event", ctx)` |
-| `client.Dispose()` | `await server.DisposeAsync()` |
+| `client.Dispose()` | `await server.DisposeAsync()` (or `server.Dispose()`) |
 
 ### From the Statsig .NET SDK
 

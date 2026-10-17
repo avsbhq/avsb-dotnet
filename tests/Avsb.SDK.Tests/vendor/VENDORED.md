@@ -5,7 +5,7 @@ Do not edit anything in `fixtures/`. It is a copy of
 `npm run vendor` in that package, so the published repo carries the
 corpus its conformance suite needs.
 
-Engine that generated this corpus: @avsbhq/core 1.6.0
+Engine that generated this corpus: @avsbhq/core 1.7.0
 
 Why here: Next to the test project that reads it.
 

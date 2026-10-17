@@ -1,0 +1,20 @@
+{
+  "case": "operator_semver_unparsable_actual_misses",
+  "family": "operator",
+  "description": "An attribute that is not a version (four parts, 1.2.3.4) never matches, even below a rule value it would sit under if read leniently.",
+  "datafile": "datafiles/operator_semver_unparsable_actual_misses.datafile.json",
+  "context": "contexts/operator_semver_unparsable_actual_misses.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": false,
+    "variationKey": "off",
+    "source": "default",
+    "ruleId": null,
+    "ruleType": null,
+    "reasons": [
+      "rule \"rule_operator\" skipped (audience not matched)",
+      "no rules matched, returning default variation"
+    ]
+  }
+}

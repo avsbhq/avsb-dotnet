@@ -1,0 +1,20 @@
+{
+  "case": "operator_semver_boolean_actual_misses",
+  "family": "operator",
+  "description": "A boolean attribute is not a version: true is never read as 1, so it does not equal 1.0.0.",
+  "datafile": "datafiles/operator_semver_boolean_actual_misses.datafile.json",
+  "context": "contexts/operator_semver_boolean_actual_misses.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": false,
+    "variationKey": "off",
+    "source": "default",
+    "ruleId": null,
+    "ruleType": null,
+    "reasons": [
+      "rule \"rule_operator\" skipped (audience not matched)",
+      "no rules matched, returning default variation"
+    ]
+  }
+}

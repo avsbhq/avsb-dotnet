@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_numeric_not_text_order_matches",
+  "family": "operator",
+  "description": "Parts compare as numbers, not text: 2.10.0 is greater than 2.9.1, which a string comparison gets backwards.",
+  "datafile": "datafiles/operator_semver_numeric_not_text_order_matches.datafile.json",
+  "context": "contexts/operator_semver_numeric_not_text_order_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

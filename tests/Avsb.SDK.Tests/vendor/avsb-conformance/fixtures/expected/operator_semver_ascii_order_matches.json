@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_ascii_order_matches",
+  "family": "operator",
+  "description": "Text pre-release identifiers compare by ASCII, so an upper-case letter sorts first: 1.0.0-Beta is lower than 1.0.0-alpha. A case-folding or locale-aware comparison gets this backwards.",
+  "datafile": "datafiles/operator_semver_ascii_order_matches.datafile.json",
+  "context": "contexts/operator_semver_ascii_order_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

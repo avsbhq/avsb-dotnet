@@ -3,7 +3,7 @@
     <TargetFrameworks>netstandard2.1;net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <PackageId>Avsb.SDK</PackageId>
     <Authors>AvsB</Authors>
     <Company>AvsB Platform</Company>
@@ -16,7 +16,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>feature-flags;experimentation;ab-testing;openfeature;dotnet</PackageTags>
-    <PackageReleaseNotes>1.0.1: targeted delivery rules honour their traffic allocation, so a 30 percent rollout serves 30 percent of its audience (it served everyone before), hashed exactly like every other A vs B SDK. The package builds for netstandard2.1 and net8.0, and the OpenFeature provider targets OpenFeature 2.x.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.1.0: six version operators for targeting (semver_eq, semver_neq, semver_gt, semver_gte, semver_lt, semver_lte) compare a string attribute as a version number, so 2.10.0 is greater than 2.9.1; a value that is not a version never matches. 1.0.1: targeted delivery rules honour their traffic allocation, so a 30 percent rollout serves 30 percent of its audience (it served everyone before), hashed exactly like every other A vs B SDK. The package builds for netstandard2.1 and net8.0, and the OpenFeature provider targets OpenFeature 2.x.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

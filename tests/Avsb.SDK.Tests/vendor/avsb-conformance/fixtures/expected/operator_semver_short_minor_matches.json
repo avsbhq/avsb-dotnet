@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_short_minor_matches",
+  "family": "operator",
+  "description": "A missing patch reads as 0: 2.3 is lower than 2.3.1.",
+  "datafile": "datafiles/operator_semver_short_minor_matches.datafile.json",
+  "context": "contexts/operator_semver_short_minor_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

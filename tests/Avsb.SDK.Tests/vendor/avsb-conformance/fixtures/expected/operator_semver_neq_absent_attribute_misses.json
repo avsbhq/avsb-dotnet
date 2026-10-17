@@ -1,0 +1,20 @@
+{
+  "case": "operator_semver_neq_absent_attribute_misses",
+  "family": "operator",
+  "description": "semver_neq on an absent attribute misses, unlike not_equals, which matches a missing value.",
+  "datafile": "datafiles/operator_semver_neq_absent_attribute_misses.datafile.json",
+  "context": "contexts/operator_semver_neq_absent_attribute_misses.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": false,
+    "variationKey": "off",
+    "source": "default",
+    "ruleId": null,
+    "ruleType": null,
+    "reasons": [
+      "rule \"rule_operator\" skipped (audience not matched)",
+      "no rules matched, returning default variation"
+    ]
+  }
+}

@@ -2,7 +2,7 @@
 
 Official .NET SDK for the [A vs B](https://app.avsb.cloud) feature-flag and experimentation platform.
 
-netstandard2.1 and net8.0. Evaluation happens in your process against a datafile read from a globally cached CDN, so a flag check is a few microseconds of local work with no network call and no proxy to operate.
+Targets net8.0 (for .NET 8 and later) and netstandard2.1; the full test suite passes against both builds on the .NET 8 runtime. Evaluation happens in your process against a datafile read from a globally cached CDN, so a flag check is a few microseconds of local work with no network call and no proxy to operate.
 
 ASP.NET Core wiring and an OpenFeature provider are included in the same package.
 

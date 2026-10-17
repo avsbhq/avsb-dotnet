@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_neq_matches",
+  "family": "operator",
+  "description": "semver_neq matches a different version and misses the same one. Matching context.",
+  "datafile": "datafiles/operator_semver_neq_matches.datafile.json",
+  "context": "contexts/operator_semver_neq_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

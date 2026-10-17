@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_number_actual_matches",
+  "family": "operator",
+  "description": "A number attribute is read as its plain decimal text: the number 2 is the version 2.0.0.",
+  "datafile": "datafiles/operator_semver_number_actual_matches.datafile.json",
+  "context": "contexts/operator_semver_number_actual_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

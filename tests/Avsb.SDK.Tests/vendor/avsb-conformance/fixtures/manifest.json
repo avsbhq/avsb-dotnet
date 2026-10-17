@@ -2,18 +2,18 @@
   "schema": "../schema.json",
   "generatedFrom": {
     "package": "@avsbhq/core",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "families": {
     "core": 12,
     "typed": 5,
     "edge": 6,
-    "operator": 24,
+    "operator": 58,
     "boundary": 14,
     "interaction": 12,
     "bandit": 8
   },
-  "caseCount": 81,
+  "caseCount": 115,
   "cases": [
     {
       "case": "flag_not_found_returns_default",
@@ -290,6 +290,210 @@
       "family": "operator",
       "description": "A PRODUCTS_VIEWED condition carrying a datasetSlug cannot be resolved server-side, so it evaluates false rather than matching all traffic.",
       "expected": "expected/operator_commerce_dataset_backed_view_misses.json"
+    },
+    {
+      "case": "operator_semver_eq_matches",
+      "family": "operator",
+      "description": "semver_eq matches the same version and nothing else. Matching context.",
+      "expected": "expected/operator_semver_eq_matches.json"
+    },
+    {
+      "case": "operator_semver_eq_misses",
+      "family": "operator",
+      "description": "semver_eq matches the same version and nothing else. Non-matching context.",
+      "expected": "expected/operator_semver_eq_misses.json"
+    },
+    {
+      "case": "operator_semver_neq_matches",
+      "family": "operator",
+      "description": "semver_neq matches a different version and misses the same one. Matching context.",
+      "expected": "expected/operator_semver_neq_matches.json"
+    },
+    {
+      "case": "operator_semver_neq_misses",
+      "family": "operator",
+      "description": "semver_neq matches a different version and misses the same one. Non-matching context.",
+      "expected": "expected/operator_semver_neq_misses.json"
+    },
+    {
+      "case": "operator_semver_gt_matches",
+      "family": "operator",
+      "description": "semver_gt is strictly greater: the equal version misses. Matching context.",
+      "expected": "expected/operator_semver_gt_matches.json"
+    },
+    {
+      "case": "operator_semver_gt_misses",
+      "family": "operator",
+      "description": "semver_gt is strictly greater: the equal version misses. Non-matching context.",
+      "expected": "expected/operator_semver_gt_misses.json"
+    },
+    {
+      "case": "operator_semver_gte_matches",
+      "family": "operator",
+      "description": "semver_gte includes the equal version and misses the one below. Matching context.",
+      "expected": "expected/operator_semver_gte_matches.json"
+    },
+    {
+      "case": "operator_semver_gte_misses",
+      "family": "operator",
+      "description": "semver_gte includes the equal version and misses the one below. Non-matching context.",
+      "expected": "expected/operator_semver_gte_misses.json"
+    },
+    {
+      "case": "operator_semver_lt_matches",
+      "family": "operator",
+      "description": "semver_lt is strictly lower: the equal version misses. Matching context.",
+      "expected": "expected/operator_semver_lt_matches.json"
+    },
+    {
+      "case": "operator_semver_lt_misses",
+      "family": "operator",
+      "description": "semver_lt is strictly lower: the equal version misses. Non-matching context.",
+      "expected": "expected/operator_semver_lt_misses.json"
+    },
+    {
+      "case": "operator_semver_lte_matches",
+      "family": "operator",
+      "description": "semver_lte includes the equal version and misses the one above. Matching context.",
+      "expected": "expected/operator_semver_lte_matches.json"
+    },
+    {
+      "case": "operator_semver_lte_misses",
+      "family": "operator",
+      "description": "semver_lte includes the equal version and misses the one above. Non-matching context.",
+      "expected": "expected/operator_semver_lte_misses.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_1_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-alpha is lower than 1.0.0-alpha.1, so semver_lt 1.0.0-alpha.1 matches it.",
+      "expected": "expected/operator_semver_prerelease_order_1_matches.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_2_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-alpha.1 is lower than 1.0.0-alpha.beta, so semver_lt 1.0.0-alpha.beta matches it.",
+      "expected": "expected/operator_semver_prerelease_order_2_matches.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_3_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-alpha.beta is lower than 1.0.0-beta, so semver_lt 1.0.0-beta matches it.",
+      "expected": "expected/operator_semver_prerelease_order_3_matches.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_4_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-beta is lower than 1.0.0-beta.2, so semver_lt 1.0.0-beta.2 matches it.",
+      "expected": "expected/operator_semver_prerelease_order_4_matches.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_5_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-beta.2 is lower than 1.0.0-beta.11, so semver_lt 1.0.0-beta.11 matches it.",
+      "expected": "expected/operator_semver_prerelease_order_5_matches.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_6_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-beta.11 is lower than 1.0.0-rc.1, so semver_lt 1.0.0-rc.1 matches it.",
+      "expected": "expected/operator_semver_prerelease_order_6_matches.json"
+    },
+    {
+      "case": "operator_semver_prerelease_order_7_matches",
+      "family": "operator",
+      "description": "SemVer 2.0.0 pre-release order: 1.0.0-rc.1 is lower than 1.0.0, so semver_lt 1.0.0 matches it.",
+      "expected": "expected/operator_semver_prerelease_order_7_matches.json"
+    },
+    {
+      "case": "operator_semver_build_metadata_ignored_matches",
+      "family": "operator",
+      "description": "Build metadata after a + is ignored: 1.0.0+build1 equals 1.0.0.",
+      "expected": "expected/operator_semver_build_metadata_ignored_matches.json"
+    },
+    {
+      "case": "operator_semver_leading_v_matches",
+      "family": "operator",
+      "description": "A leading v or V is allowed on either side: an attribute of v2.3.0 equals a rule value of V2.3.",
+      "expected": "expected/operator_semver_leading_v_matches.json"
+    },
+    {
+      "case": "operator_semver_short_major_matches",
+      "family": "operator",
+      "description": "A missing minor and patch read as 0: 2 equals 2.0.0.",
+      "expected": "expected/operator_semver_short_major_matches.json"
+    },
+    {
+      "case": "operator_semver_short_minor_matches",
+      "family": "operator",
+      "description": "A missing patch reads as 0: 2.3 is lower than 2.3.1.",
+      "expected": "expected/operator_semver_short_minor_matches.json"
+    },
+    {
+      "case": "operator_semver_numeric_not_text_order_matches",
+      "family": "operator",
+      "description": "Parts compare as numbers, not text: 2.10.0 is greater than 2.9.1, which a string comparison gets backwards.",
+      "expected": "expected/operator_semver_numeric_not_text_order_matches.json"
+    },
+    {
+      "case": "operator_semver_beyond_64_bits_matches",
+      "family": "operator",
+      "description": "Numeric parts have no size limit: 18446744073709551616 (2^64) is greater than 18446744073709551615, which overflows a 64-bit integer and rounds equal as a double.",
+      "expected": "expected/operator_semver_beyond_64_bits_matches.json"
+    },
+    {
+      "case": "operator_semver_ascii_order_matches",
+      "family": "operator",
+      "description": "Text pre-release identifiers compare by ASCII, so an upper-case letter sorts first: 1.0.0-Beta is lower than 1.0.0-alpha. A case-folding or locale-aware comparison gets this backwards.",
+      "expected": "expected/operator_semver_ascii_order_matches.json"
+    },
+    {
+      "case": "operator_semver_whitespace_trimmed_matches",
+      "family": "operator",
+      "description": "Surrounding spaces and tabs are trimmed from both sides before parsing.",
+      "expected": "expected/operator_semver_whitespace_trimmed_matches.json"
+    },
+    {
+      "case": "operator_semver_number_actual_matches",
+      "family": "operator",
+      "description": "A number attribute is read as its plain decimal text: the number 2 is the version 2.0.0.",
+      "expected": "expected/operator_semver_number_actual_matches.json"
+    },
+    {
+      "case": "operator_semver_unparsable_rule_value_misses",
+      "family": "operator",
+      "description": "A rule value that is not a version (2.x) never matches, even an attribute a lenient reading would place above it.",
+      "expected": "expected/operator_semver_unparsable_rule_value_misses.json"
+    },
+    {
+      "case": "operator_semver_unparsable_actual_misses",
+      "family": "operator",
+      "description": "An attribute that is not a version (four parts, 1.2.3.4) never matches, even below a rule value it would sit under if read leniently.",
+      "expected": "expected/operator_semver_unparsable_actual_misses.json"
+    },
+    {
+      "case": "operator_semver_leading_zero_misses",
+      "family": "operator",
+      "description": "A numeric part with a leading zero is not a version: 01.2.3 does not equal 1.2.3, as an integer parse would say.",
+      "expected": "expected/operator_semver_leading_zero_misses.json"
+    },
+    {
+      "case": "operator_semver_boolean_actual_misses",
+      "family": "operator",
+      "description": "A boolean attribute is not a version: true is never read as 1, so it does not equal 1.0.0.",
+      "expected": "expected/operator_semver_boolean_actual_misses.json"
+    },
+    {
+      "case": "operator_semver_neq_unparsable_misses",
+      "family": "operator",
+      "description": "semver_neq needs both sides to parse: an attribute that is not a version does not count as \"not equal\".",
+      "expected": "expected/operator_semver_neq_unparsable_misses.json"
+    },
+    {
+      "case": "operator_semver_neq_absent_attribute_misses",
+      "family": "operator",
+      "description": "semver_neq on an absent attribute misses, unlike not_equals, which matches a missing value.",
+      "expected": "expected/operator_semver_neq_absent_attribute_misses.json"
     },
     {
       "case": "boundary_allocation_fractional_bucket_below_threshold",

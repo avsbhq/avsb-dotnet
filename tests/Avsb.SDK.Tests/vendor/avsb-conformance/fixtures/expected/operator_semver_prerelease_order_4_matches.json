@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_prerelease_order_4_matches",
+  "family": "operator",
+  "description": "SemVer 2.0.0 pre-release order: 1.0.0-beta is lower than 1.0.0-beta.2, so semver_lt 1.0.0-beta.2 matches it.",
+  "datafile": "datafiles/operator_semver_prerelease_order_4_matches.datafile.json",
+  "context": "contexts/operator_semver_prerelease_order_4_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

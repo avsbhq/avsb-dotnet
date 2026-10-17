@@ -3,7 +3,7 @@
   "family": "allocation",
   "generatedFrom": {
     "package": "@avsbhq/core",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "contextsPerFixture": 200,
   "fixtureCount": 6,

@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_build_metadata_ignored_matches",
+  "family": "operator",
+  "description": "Build metadata after a + is ignored: 1.0.0+build1 equals 1.0.0.",
+  "datafile": "datafiles/operator_semver_build_metadata_ignored_matches.datafile.json",
+  "context": "contexts/operator_semver_build_metadata_ignored_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

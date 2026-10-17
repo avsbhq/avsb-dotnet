@@ -1,0 +1,19 @@
+{
+  "case": "operator_semver_whitespace_trimmed_matches",
+  "family": "operator",
+  "description": "Surrounding spaces and tabs are trimmed from both sides before parsing.",
+  "datafile": "datafiles/operator_semver_whitespace_trimmed_matches.datafile.json",
+  "context": "contexts/operator_semver_whitespace_trimmed_matches.context.json",
+  "flagKey": "operator-feature",
+  "defaultValue": false,
+  "expected": {
+    "value": true,
+    "variationKey": "on",
+    "source": "rule",
+    "ruleId": "rule_operator",
+    "ruleType": "targeted_delivery",
+    "reasons": [
+      "rule \"rule_operator\" matched (targeted_delivery), serving variation \"on\""
+    ]
+  }
+}

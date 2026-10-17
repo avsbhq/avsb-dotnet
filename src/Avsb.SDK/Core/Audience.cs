@@ -121,6 +121,11 @@ internal static class AudienceEvaluator
             "lte" => JsNumber.NumberOf(actual) <= JsNumber.NumberOf(expected),
             "in_list" => AnyValueMatches(actualText, condition.Value),
             "not_in_list" => !AnyValueMatches(actualText, condition.Value),
+            // Version comparison (SemVer.cs) reads the raw attribute: a number converts the way
+            // JavaScript prints it, and any other type is no match. An SDK that predates these
+            // operators reaches the discard arm, which is false.
+            "semver_eq" or "semver_neq" or "semver_gt" or "semver_gte" or "semver_lt" or "semver_lte" =>
+                SemVer.Evaluate(condition.Operator, actual, ExpectedScalar(condition.Value)),
             _ => false,
         };
     }
